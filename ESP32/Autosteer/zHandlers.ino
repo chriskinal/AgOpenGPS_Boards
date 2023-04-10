@@ -1,6 +1,9 @@
 // Conversion to Hexidecimal
 const char* asciiHex = "0123456789ABCDEF";
 
+/* A parser is declared with 3 handlers at most */
+NMEAParser<2> parser;
+
 // the new PANDA sentence buffer
 char nmea[100];
 
@@ -26,6 +29,12 @@ char imuRoll[6];
 char imuPitch[6];
 char imuYawRate[6];
 
+void initHandler() {
+  // the dash means wildcard
+  parser.setErrorHandler(errorHandler);
+  parser.addHandler("G-GGA", GGA_Handler);
+  parser.addHandler("G-VTG", VTG_Handler);
+}
 // If odd characters showed up.
 void errorHandler() {
   //nothing at the moment
@@ -67,6 +76,12 @@ void GGA_Handler()  //Rec'd GGA
     itoa(65535, imuHeading, 10);
   }             //Get IMU data ready
   BuildNmea();  //Build & send data GPS data to AgIO (Both Dual & Single)
+}
+
+void gpsStream() {
+  while (Serial2.available()) {
+    parser << Serial2.read();
+  }
 }
 
 void readBNO() {
@@ -132,12 +147,6 @@ void readBNO() {
     if (invertRoll) {
       roll *= -1;
     }
-    Serial.print("yaw: ");
-    Serial.print(yaw);
-    Serial.print(", roll:");
-    Serial.print(roll);
-    Serial.print(" , ");
-    Serial.println(pitch);
   }
 }
 

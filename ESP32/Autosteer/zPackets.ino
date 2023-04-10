@@ -16,9 +16,36 @@ unsigned int AOGNtripPort = 2233;                 // port NTRIP data from AOG co
 unsigned int AOGAutoSteerPort = 8888;             // port Autosteer data from AOG comes in
 unsigned int portDestination = 9999;              // Port of AOG that listens
 IPAddress ipDes = IPAddress(255, 255, 255, 255);  //AOG IP
+
+AsyncUDP udp;
+AsyncUDP ntrip;
+
+void startUDP() {
+
+  if (udp.listen(8888)) {
+    Serial.print("UDP Listening on IP: ");
+    Serial.println(WiFi.localIP());
+    udp.onPacket([](AsyncUDPPacket packet) {
+      autoSteerPacketPerser(packet);
+    });
+  }
+
+  if (ntrip.listen(2233)) {
+    Serial.print("UDP Listening on IP: ");
+    Serial.println(WiFi.localIP());
+    ntrip.onPacket([](AsyncUDPPacket packet) {
+      ntripPacketProxy(packet);
+    });
+  }
+}
 void steerConfigInit() {
   if (steerConfig.CytronDriver) {
     pinMode(PWM2_RPWM, OUTPUT);
+  }
+}
+void ntripPacketProxy(AsyncUDPPacket packet) {
+  if (packet.length() > 0) {
+    Serial2.print((char*)packet.data());
   }
 }
 

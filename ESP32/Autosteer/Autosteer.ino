@@ -47,15 +47,16 @@ BNO080 myIMU;
 #include <Wire.h>
 #include "zNMEAParser.h"
 
-AsyncUDP udp;
-
 IPAddress myip;
 
 Scheduler ts;
 
 void readBNO();
+void gpsStream();
 
 Task t1(TASK_IMMEDIATE, TASK_FOREVER, &readBNO, &ts, true);
+
+Task t2(TASK_IMMEDIATE, TASK_FOREVER, &gpsStream, &ts, true);
 
 //loop time variables in microseconds
 const uint16_t LOOP_TIME = 25;  //40Hz
@@ -90,7 +91,7 @@ bool guidanceStatusChanged = false;
 
 //speed sent as *10
 float gpsSpeed = 0;
-bool GGA_Available = false;    //Do we have GGA on correct port?
+bool GGA_Available = false;  //Do we have GGA on correct port?
 
 // booleans to see if we are using BNO08x
 bool useBNO08x = false;
@@ -99,10 +100,7 @@ float roll = 0;
 float pitch = 0;
 float yaw = 0;
 
-/* A parser is declared with 3 handlers at most */
-NMEAParser<2> parser;
-
-const bool invertRoll= true;  //Used for IMU with dual antenna
+const bool invertRoll = true;  //Used for IMU with dual antenna
 
 //Fusing BNO with Dual
 double rollDelta;
@@ -253,6 +251,7 @@ void autosteerSetup() {
 void setup() {
   // Setup Serial Monitor
   Serial.begin(115200);
+  Serial2.begin(115200);
 
   // Create WiFiManager object
   WiFiManager wfm;
@@ -274,13 +273,10 @@ void setup() {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
-  if (udp.listen(8888)) {
-    Serial.print("UDP Listening on IP: ");
-    Serial.println(WiFi.localIP());
-    udp.onPacket([](AsyncUDPPacket packet) {
-      autoSteerPacketPerser(packet);
-    });
-  }
+  startUDP();
+
+  initHandler();
+
   autosteerSetup();
 }
 
