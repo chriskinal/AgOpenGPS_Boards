@@ -54,8 +54,6 @@ Scheduler ts;
 void readBNO();
 void gpsStream();
 
-Task t1(TASK_IMMEDIATE, TASK_FOREVER, &readBNO, &ts, true);
-
 Task t2(TASK_IMMEDIATE, TASK_FOREVER, &gpsStream, &ts, true);
 
 //loop time variables in microseconds
@@ -174,6 +172,12 @@ void steerSettingsInit() {
   highLowPerDeg = ((float)(steerSettings.highPWM - steerSettings.lowPWM)) / LOW_HIGH_DEGREES;
 }
 
+void steerConfigInit() {
+  if (steerConfig.CytronDriver) {
+    pinMode(PWM2_RPWM, OUTPUT);
+  }
+}
+
 void autosteerSetup() {
   //PWM rate settings. Set them both the same!!!!
   /*  PWM Frequency ->
@@ -242,6 +246,7 @@ void autosteerSetup() {
     // Use gameRotationVector and set REPORT_INTERVAL
     myIMU.enableGameRotationVector(REPORT_INTERVAL);
     useBNO08x = true;
+    Task t1(TASK_IMMEDIATE, TASK_FOREVER, &readBNO, &ts, true);
   } else {
     Serial.println("BNO080 not detected at given I2C address.");
   }
@@ -253,28 +258,8 @@ void setup() {
   Serial.begin(115200);
   Serial2.begin(115200);
 
-  // Create WiFiManager object
-  WiFiManager wfm;
-  // Supress Debug information
-  wfm.setDebugOutput(false);
-
-  if (!wfm.autoConnect("ESP32TEST_AP")) {
-    // Did not connect, print error message
-    Serial.println("failed to connect and hit timeout");
-
-    // Reset and try again
-    ESP.restart();
-    delay(1000);
-  }
-
-  myip = WiFi.localIP();
-  // Connected!
-  Serial.println("WiFi connected");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
-
-  startUDP();
-
+  initWifi();
+  
   initHandler();
 
   autosteerSetup();
