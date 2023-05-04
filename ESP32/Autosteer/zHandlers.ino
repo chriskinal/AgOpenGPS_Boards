@@ -1,8 +1,15 @@
+#define RAD_TO_DEG_X_10 572.95779513082320876798154814105
 // Conversion to Hexidecimal
 const char* asciiHex = "0123456789ABCDEF";
 
 /* A parser is declared with 3 handlers at most */
 NMEAParser<2> parser;
+
+struct euler_t {
+  float yaw;
+  float pitch;
+  float roll;
+} ypr;
 
 // the new PANDA sentence buffer
 char nmea[100];
@@ -84,69 +91,35 @@ void gpsStream() {
   }
 }
 
-void readBNO() {
-  if (myIMU.dataAvailable() == true) {
-    float dqx, dqy, dqz, dqw, dacr;
-    uint8_t dac;
+void readBNO(float qr, float qi, float qj, float qk) {
+  quaternionToEuler(qr, qi, qj, qk);
+}
 
-    //get quaternion
-    myIMU.getQuat(dqx, dqy, dqz, dqw, dacr, dac);
-    /*            
-            while (bno08x.dataAvailable() == true)
-            {
-                //get quaternion
-                bno08x.getQuat(dqx, dqy, dqz, dqw, dacr, dac);
-                //Serial.println("Whiling");
-                //Serial.print(dqx, 4);
-                //Serial.print(F(","));
-                //Serial.print(dqy, 4);
-                //Serial.print(F(","));
-                //Serial.print(dqz, 4);
-                //Serial.print(F(","));
-                //Serial.println(dqw, 4);
-            }
-            //Serial.println("End of while");
-*/
-    float norm = sqrt(dqw * dqw + dqx * dqx + dqy * dqy + dqz * dqz);
-    dqw = dqw / norm;
-    dqx = dqx / norm;
-    dqy = dqy / norm;
-    dqz = dqz / norm;
+void quaternionToEuler(float qr, float qi, float qj, float qk) {
 
-    float ysqr = dqy * dqy;
+  float sqr = sq(qr);
+  float sqi = sq(qi);
+  float sqj = sq(qj);
+  float sqk = sq(qk);
 
-    // yaw (z-axis rotation)
-    float t3 = +2.0 * (dqw * dqz + dqx * dqy);
-    float t4 = +1.0 - 2.0 * (ysqr + dqz * dqz);
-    yaw = atan2(t3, t4);
+    ypr.yaw = atan2(2.0 * (qi * qj + qk * qr), (sqi - sqj - sqk + sqr));
+  if (steerConfig.IsUseY_Axis) {
+    ypr.pitch = asin(-2.0 * (qi * qk - qj * qr) / (sqi + sqj + sqk + sqr));
+    ypr.roll = atan2(2.0 * (qj * qk + qi * qr), (-sqi - sqj + sqk + sqr));
+  } else {
+    ypr.roll = asin(-2.0 * (qi * qk - qj * qr) / (sqi + sqj + sqk + sqr));
+    ypr.pitch = atan2(2.0 * (qj * qk + qi * qr), (-sqi - sqj + sqk + sqr));
+  }
 
-    // Convert yaw to degrees x10
-    correctionHeading = -yaw;
-    yaw = (int16_t)((yaw * -RAD_TO_DEG_X_10));
-    if (yaw < 0) yaw += 3600;
+  ypr.yaw *= RAD_TO_DEG_X_10;
+   if (ypr.yaw < 0){
+     ypr.yaw += 3600;
+   }
+  ypr.pitch *= RAD_TO_DEG_X_10;
+  ypr.roll *= RAD_TO_DEG_X_10;
 
-    // pitch (y-axis rotation)
-    float t2 = +2.0 * (dqw * dqy - dqz * dqx);
-    t2 = t2 > 1.0 ? 1.0 : t2;
-    t2 = t2 < -1.0 ? -1.0 : t2;
-    //            pitch = asin(t2) * RAD_TO_DEG_X_10;
-
-    // roll (x-axis rotation)
-    float t0 = +2.0 * (dqw * dqx + dqy * dqz);
-    float t1 = +1.0 - 2.0 * (dqx * dqx + ysqr);
-    //            roll = atan2(t0, t1) * RAD_TO_DEG_X_10;
-
-    if (steerConfig.IsUseY_Axis) {
-      roll = asin(t2) * RAD_TO_DEG_X_10;
-      pitch = atan2(t0, t1) * RAD_TO_DEG_X_10;
-    } else {
-      pitch = asin(t2) * RAD_TO_DEG_X_10;
-      roll = atan2(t0, t1) * RAD_TO_DEG_X_10;
-    }
-
-    if (invertRoll) {
-      roll *= -1;
-    }
+  if (invertRoll) {
+    ypr.roll *= -1;
   }
 }
 
@@ -156,15 +129,15 @@ void imuHandler() {
   if (useBNO08x) {
     //BNO is reading in its own timer
     // Fill rest of Panda Sentence - Heading
-    temp = yaw;
+    temp = ypr.yaw;
     itoa(temp, imuHeading, 10);
 
     // the pitch x10
-    temp = (int16_t)pitch;
+    temp = (int16_t)ypr.pitch;
     itoa(temp, imuPitch, 10);
 
     // the roll x10
-    temp = (int16_t)roll;
+    temp = (int16_t)ypr.roll;
     itoa(temp, imuRoll, 10);
 
     // YawRate - 0 for now
@@ -173,6 +146,7 @@ void imuHandler() {
 }
 
 void BuildNmea(void) {
+
   strcpy(nmea, "");
 
   strcat(nmea, "$PANDA,");

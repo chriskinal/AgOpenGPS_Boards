@@ -6,7 +6,7 @@ Librarys:
 
  https://github.com/pfeerick/elapsedMillis
 
- https://github.com/sparkfun/SparkFun_BNO080_Arduino_Library
+ https://github.com/adafruit/Adafruit_BNO08x
 
 
 BNO080 kalibráláshoz ezt használja mindenki:
