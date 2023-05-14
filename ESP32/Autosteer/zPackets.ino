@@ -22,7 +22,7 @@ AsyncUDP ntrip;
 
 void startUDP() {
 
-  if (udp.listen(8888)) {
+  if (udp.listen(AOGAutoSteerPort)) {
     Serial.print("UDP Listening on IP: ");
     Serial.println(WiFi.localIP());
     udp.onPacket([](AsyncUDPPacket packet) {
@@ -30,7 +30,7 @@ void startUDP() {
     });
   }
 
-  if (ntrip.listen(2233)) {
+  if (ntrip.listen(AOGNtripPort)) {
     Serial.print("UDP Listening on IP: ");
     Serial.println(WiFi.localIP());
     ntrip.onPacket([](AsyncUDPPacket packet) {
@@ -38,20 +38,42 @@ void startUDP() {
     });
   }
 }
-void steerConfigInit() {
-  if (steerConfig.CytronDriver) {
-    pinMode(PWM2_RPWM, OUTPUT);
+
+void initWifi(){
+   // Create WiFiManager object
+  WiFiManager wfm;
+  // Supress Debug information
+  wfm.setDebugOutput(false);
+
+  if (!wfm.autoConnect("AGOpenGPS Autosteer")) {
+    // Did not connect, print error message
+    Serial.println("failed to connect and hit timeout");
+
+    // Reset and try again
+    ESP.restart();
+    delay(1000);
   }
+
+  myip = WiFi.localIP();
+  // Connected!
+  Serial.println("WiFi connected");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  startUDP();
 }
+
 void ntripPacketProxy(AsyncUDPPacket packet) {
   if (packet.length() > 0) {
-    Serial2.print((char*)packet.data());
+    Serial2.write(packet.data(), packet.length());
   }
 }
 
 void autoSteerPacketPerser(AsyncUDPPacket packet) {
-  if (packet.length() < 5)
+  if (packet.length() < 5){
+    Serial.println("Packet lenght error!!");
     return;
+  }
   autoSteerUdpData = packet.data();
   if (autoSteerUdpData[0] == 0x80 && autoSteerUdpData[1] == 0x81 && autoSteerUdpData[2] == 0x7F)  //Data
   {
@@ -151,22 +173,14 @@ void autoSteerPacketPerser(AsyncUDPPacket packet) {
           }
           //PID values
           steerSettings.Kp = ((float)autoSteerUdpData[5]);  // read Kp from AgOpenGPS
-
           steerSettings.highPWM = autoSteerUdpData[6];  // read high pwm
-
           steerSettings.lowPWM = (float)autoSteerUdpData[7];  // read lowPWM from AgOpenGPS
-
           steerSettings.minPWM = autoSteerUdpData[8];  //read the minimum amount of PWM for instant on
-
           float temp = (float)steerSettings.minPWM * 1.2;
           steerSettings.lowPWM = (byte)temp;
-
           steerSettings.steerSensorCounts = autoSteerUdpData[9];  //sent as setting displayed in AOG
-
           steerSettings.wasOffset = (autoSteerUdpData[10]);  //read was zero offset Lo
-
           steerSettings.wasOffset |= (autoSteerUdpData[11] << 8);  //read was zero offset Hi
-
           steerSettings.AckermanFix = (float)autoSteerUdpData[12] * 0.01;
 
           //crc
@@ -239,9 +253,10 @@ void autoSteerPacketPerser(AsyncUDPPacket packet) {
 
             sendUdp(helloFromAutoSteer, sizeof(helloFromAutoSteer));
           }
+          /*  PANDA....
           if (useBNO08x) {
             sendUdp(helloFromIMU, sizeof(helloFromIMU));
-          }
+          }*/
         }
       case 202:
         {
@@ -264,6 +279,9 @@ void autoSteerPacketPerser(AsyncUDPPacket packet) {
           }
         }
     }
+  }
+  else{
+    Serial.println("Unknown packet!!!");
   }
 }
 

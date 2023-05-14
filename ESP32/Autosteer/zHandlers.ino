@@ -1,3 +1,6 @@
+#include <Adafruit_BNO08x.h>
+
+
 #define RAD_TO_DEG_X_10 572.95779513082320876798154814105
 // Conversion to Hexidecimal
 const char* asciiHex = "0123456789ABCDEF";
@@ -5,11 +8,31 @@ const char* asciiHex = "0123456789ABCDEF";
 /* A parser is declared with 3 handlers at most */
 NMEAParser<2> parser;
 
+struct IMUVector {
+  uint32_t time;
+  float qr;
+  float qi;
+  float qj;
+  float qk;
+} imuVector;
+
 struct euler_t {
   float yaw;
   float pitch;
   float roll;
 } ypr;
+
+// booleans to see if we are using BNO08x
+bool useBNO08x = false;
+uint8_t error;
+
+Adafruit_BNO08x bno08x(-1);
+// BNO08x address variables to check where it is
+const uint8_t bno08xAddresses[] = { 0x4A, 0x4B };
+const int16_t nrBNO08xAdresses = sizeof(bno08xAddresses) / sizeof(bno08xAddresses[0]);
+uint8_t bno08xAddress;
+
+sh2_SensorValue_t sensorValue;
 
 // the new PANDA sentence buffer
 char nmea[100];
@@ -78,6 +101,7 @@ void GGA_Handler()  //Rec'd GGA
   GGA_Available = true;
 
   if (useBNO08x) {
+    calculateIMU();
     imuHandler();
   } else {
     itoa(65535, imuHeading, 10);
@@ -92,7 +116,15 @@ void gpsStream() {
 }
 
 void readBNO(float qr, float qi, float qj, float qk) {
-  quaternionToEuler(qr, qi, qj, qk);
+  imuVector.time = millis();
+  imuVector.qr = qr;
+  imuVector.qi = qi;
+  imuVector.qj = qj;
+  imuVector.qk = qk;
+}
+
+void calculateIMU() {
+  quaternionToEuler(imuVector.qr, imuVector.qi, imuVector.qj, imuVector.qk);
 }
 
 void quaternionToEuler(float qr, float qi, float qj, float qk) {
@@ -102,7 +134,7 @@ void quaternionToEuler(float qr, float qi, float qj, float qk) {
   float sqj = sq(qj);
   float sqk = sq(qk);
 
-    ypr.yaw = atan2(2.0 * (qi * qj + qk * qr), (sqi - sqj - sqk + sqr));
+  ypr.yaw = atan2(2.0 * (qi * qj + qk * qr), (sqi - sqj - sqk + sqr));
   if (steerConfig.IsUseY_Axis) {
     ypr.pitch = asin(-2.0 * (qi * qk - qj * qr) / (sqi + sqj + sqk + sqr));
     ypr.roll = atan2(2.0 * (qj * qk + qi * qr), (-sqi - sqj + sqk + sqr));
@@ -111,15 +143,56 @@ void quaternionToEuler(float qr, float qi, float qj, float qk) {
     ypr.pitch = atan2(2.0 * (qj * qk + qi * qr), (-sqi - sqj + sqk + sqr));
   }
 
-  ypr.yaw *= RAD_TO_DEG_X_10;
-   if (ypr.yaw < 0){
-     ypr.yaw += 3600;
-   }
+  ypr.yaw *= -RAD_TO_DEG_X_10;
+  if (ypr.yaw < 0) {
+    ypr.yaw += 3600;
+  }
   ypr.pitch *= RAD_TO_DEG_X_10;
   ypr.roll *= RAD_TO_DEG_X_10;
 
   if (invertRoll) {
     ypr.roll *= -1;
+  }
+}
+
+void setReports() {
+  if (!bno08x.enableReport(SH2_GAME_ROTATION_VECTOR, 20000)) {
+    Serial.println("Could not enable stabilized remote vector");
+    return;
+  }
+}
+
+void initIMU() {
+  //set up communication
+  Wire.begin();
+  for (int16_t i = 0; i < nrBNO08xAdresses; i++) {
+    bno08xAddress = bno08xAddresses[i];
+
+    //Serial.print("\r\nChecking for BNO08X on ");
+    //Serial.println(bno08xAddress, HEX);
+    Wire.beginTransmission(bno08xAddress);
+    error = Wire.endTransmission();
+
+    if (error == 0) {
+      //Serial.println("Error = 0");
+      Serial.print("0x");
+      Serial.print(bno08xAddress, HEX);
+      Serial.println(" BNO08X Ok.");
+      // Initialize BNO080 lib
+      if (bno08x.begin_I2C((int32_t)bno08xAddress))  //??? Passing NULL to non pointer argument, remove maybe ???
+      {
+        setReports();
+        useBNO08x = true;
+      } else {
+        Serial.println("BNO080 not detected at given I2C address.");
+      }
+    } else {
+      //Serial.println("Error = 4");
+      Serial.print("0x");
+      Serial.print(bno08xAddress, HEX);
+      Serial.println(" BNO08X not Connected or Found");
+    }
+    if (useBNO08x) break;
   }
 }
 
@@ -142,6 +215,24 @@ void imuHandler() {
 
     // YawRate - 0 for now
     itoa(0, imuYawRate, 10);
+  }
+}
+
+void imuTask() {
+  if (bno08x.wasReset()) {
+    Serial.print("sensor was reset ");
+    setReports();
+  }
+
+  if (!bno08x.getSensorEvent(&sensorValue)) {
+    return;
+  }
+
+  switch (sensorValue.sensorId) {
+
+    case SH2_GAME_ROTATION_VECTOR:
+      readBNO(sensorValue.un.gameRotationVector.real, sensorValue.un.gameRotationVector.i, sensorValue.un.gameRotationVector.j, sensorValue.un.gameRotationVector.k);
+      break;
   }
 }
 
@@ -322,13 +413,4 @@ void VTG_Handler() {
 
   // vtg Speed knots
   parser.getArg(4, speedKnots);
-}
-
-void fuseIMU() {
-  //determine the Corrected heading based on gyro and GPS
-  imuCorrected = correctionHeading + imuGPS_Offset;
-  if (imuCorrected > twoPI) imuCorrected -= twoPI;
-  if (imuCorrected < 0) imuCorrected += twoPI;
-
-  imuCorrected = imuCorrected * RAD_TO_DEG;
 }

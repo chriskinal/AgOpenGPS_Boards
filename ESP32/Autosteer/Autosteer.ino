@@ -6,7 +6,6 @@
 #include <EEPROM.h>
 #include <Wire.h>
 #include "zNMEAParser.h"
-#include <Adafruit_BNO08x.h>
 /*  PWM Frequency ->
      490hz (default) = 0
      122hz = 1
@@ -49,10 +48,11 @@ IPAddress myip;
 
 Scheduler ts;
 
-void readBNO();
+void imuTask();
+
 void gpsStream();
 
-//Task t1(TASK_IMMEDIATE, TASK_FOREVER, &readBNO, &ts, true);
+Task t1(TASK_IMMEDIATE, TASK_FOREVER, &imuTask, &ts, true);
 
 Task t2(TASK_IMMEDIATE, TASK_FOREVER, &gpsStream, &ts, true);
 
@@ -90,34 +90,7 @@ bool guidanceStatusChanged = false;
 float gpsSpeed = 0;
 bool GGA_Available = false;  //Do we have GGA on correct port?
 
-// booleans to see if we are using BNO08x
-bool useBNO08x = false;
-uint8_t error;
-
-Adafruit_BNO08x bno08x(-1);
-// BNO08x address variables to check where it is
-const uint8_t bno08xAddresses[] = { 0x4A, 0x4B };
-const int16_t nrBNO08xAdresses = sizeof(bno08xAddresses) / sizeof(bno08xAddresses[0]);
-uint8_t bno08xAddress;
-
-sh2_SensorValue_t sensorValue;
-
-float roll = 0;
-float pitch = 0;
-float yaw = 0;
-
 const bool invertRoll = true;  //Used for IMU with dual antenna
-
-//Fusing BNO with Dual
-double rollDelta;
-double rollDeltaSmooth;
-double correctionHeading;
-double gyroDelta;
-double imuGPS_Offset;
-double gpsHeading;
-double imuCorrected;
-#define twoPI 6.28318530717958647692
-#define PIBy2 1.57079632679489661923
 
 
 #define REPORT_INTERVAL 20  //BNO report time, we want to keep reading it quick & offen. Its not timmed to anything just give constant data.
@@ -179,12 +152,12 @@ void steerSettingsInit() {
   highLowPerDeg = ((float)(steerSettings.highPWM - steerSettings.lowPWM)) / LOW_HIGH_DEGREES;
 }
 
-void setReports() {
-  if (!bno08x.enableReport(SH2_GAME_ROTATION_VECTOR, 20000)) {
-    Serial.println("Could not enable stabilized remote vector");
-    return;
+void steerConfigInit() {
+  if (steerConfig.CytronDriver) {
+    pinMode(PWM2_RPWM, OUTPUT);
   }
 }
+
 void autosteerSetup() {
   //PWM rate settings. Set them both the same!!!!
   /*  PWM Frequency ->
@@ -213,9 +186,6 @@ void autosteerSetup() {
   //pinMode(CURRENT_SENSOR_PIN, INPUT_DISABLE);
   //pinMode(PRESSURE_SENSOR_PIN, INPUT_DISABLE);
 
-  //set up communication
-  Wire.begin();
-
   EEPROM.get(0, EEread);  // read identifier
 
   if (EEread != EEP_Ident)  // check on first start and write EEPROM
@@ -241,37 +211,6 @@ void autosteerSetup() {
     Serial.println("Autosteer disabled, GPS only mode");
     return;
   }
-
-  for (int16_t i = 0; i < nrBNO08xAdresses; i++) {
-    bno08xAddress = bno08xAddresses[i];
-
-    //Serial.print("\r\nChecking for BNO08X on ");
-    //Serial.println(bno08xAddress, HEX);
-    Wire.beginTransmission(bno08xAddress);
-    error = Wire.endTransmission();
-
-    if (error == 0) {
-      //Serial.println("Error = 0");
-      Serial.print("0x");
-      Serial.print(bno08xAddress, HEX);
-      Serial.println(" BNO08X Ok.");
-      // Initialize BNO080 lib
-      if (bno08x.begin_I2C((int32_t)bno08xAddress))  //??? Passing NULL to non pointer argument, remove maybe ???
-      {
-        setReports();
-        useBNO08x = true;
-      } else {
-        Serial.println("BNO080 not detected at given I2C address.");
-      }
-    } else {
-      //Serial.println("Error = 4");
-      Serial.print("0x");
-      Serial.print(bno08xAddress, HEX);
-      Serial.println(" BNO08X not Connected or Found");
-    }
-    if (useBNO08x) break;
-  }
-
 }  // End of Setup
 
 void setup() {
@@ -279,29 +218,11 @@ void setup() {
   Serial.begin(115200);
   Serial2.begin(115200);
 
-  // Create WiFiManager object
-  WiFiManager wfm;
-  // Supress Debug information
-  wfm.setDebugOutput(true);
-
-  if (!wfm.autoConnect("ESP32TEST_AP")) {
-    // Did not connect, print error message
-    Serial.println("failed to connect and hit timeout");
-
-    // Reset and try again
-    ESP.restart();
-    delay(1000);
-  }
-
-  myip = WiFi.localIP();
-  // Connected!
-  Serial.println("WiFi connected");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
-
-  startUDP();
+  initWifi();
 
   initHandler();
+
+  initIMU();
 
   autosteerSetup();
 }
@@ -309,28 +230,4 @@ void setup() {
 void loop() {
 
   ts.execute();
-
-if (bno08x.wasReset()) {
-    Serial.print("sensor was reset ");
-    setReports();
-  }
-
-  if (!bno08x.getSensorEvent(&sensorValue)) {
-    return;
-  }
-
-  switch (sensorValue.sensorId) {
-
-    case SH2_GAME_ROTATION_VECTOR:
-      readBNO(sensorValue.un.gameRotationVector.real, sensorValue.un.gameRotationVector.i, sensorValue.un.gameRotationVector.j, sensorValue.un.gameRotationVector.k);
-      Serial.print("Game Rotation Vector - r: ");
-      Serial.print(sensorValue.un.gameRotationVector.real);
-      Serial.print(" i: ");
-      Serial.print(sensorValue.un.gameRotationVector.i);
-      Serial.print(" j: ");
-      Serial.print(sensorValue.un.gameRotationVector.j);
-      Serial.print(" k: ");
-      Serial.println(sensorValue.un.gameRotationVector.k);
-      break;
-  }
 }
