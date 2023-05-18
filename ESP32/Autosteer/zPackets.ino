@@ -2,7 +2,6 @@ uint8_t* autoSteerUdpData;
 //Heart beat hello AgIO
 uint8_t helloFromIMU[] = { 128, 129, 121, 121, 5, 0, 0, 0, 0, 0, 71 };
 uint8_t helloFromAutoSteer[] = { 0x80, 0x81, 126, 126, 5, 0, 0, 0, 0, 0, 71 };
-int16_t helloSteerPosition = 0;
 
 //fromAutoSteerData FD 253 - ActualSteerAngle*100 -5,6, SwitchByte-7, pwmDisplay-8
 uint8_t PGN_253[] = { 0x80, 0x81, 126, 0xFD, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0xCC };
@@ -83,7 +82,6 @@ void autoSteerPacketPerser(AsyncUDPPacket packet) {
           if (!Autosteer_running) {
             break;
           }
-
           gpsSpeed = ((float)(autoSteerUdpData[5] | autoSteerUdpData[6] << 8)) * 0.1;
           gpsSpeedUpdateTimer = 0;
 
@@ -106,6 +104,8 @@ void autoSteerPacketPerser(AsyncUDPPacket packet) {
           {
             watchdogTimer = 0;  //reset watchdog
           }
+          //TEMP TEST
+          calcSteerAngle();
 
           //Bit 10 Tram
           tram = autoSteerUdpData[10];

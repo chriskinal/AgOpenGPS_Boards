@@ -7,7 +7,8 @@ Librarys:
  https://github.com/pfeerick/elapsedMillis
 
  https://github.com/adafruit/Adafruit_BNO08x
-
+ 
+ https://github.com/denyssene/SimpleKalmanFilter
 
 BNO080 kalibráláshoz ezt használja mindenki:
 

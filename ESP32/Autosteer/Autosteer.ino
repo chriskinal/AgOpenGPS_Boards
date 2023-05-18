@@ -35,10 +35,6 @@
 #define WORKSW_PIN 34
 #define REMOTE_PIN 37
 
-//Define sensor pin for current or pressure sensor
-#define CURRENT_SENSOR_PIN A17
-#define PRESSURE_SENSOR_PIN A10
-
 #define CONST_180_DIVIDED_BY_PI 57.2957795130823
 
 //How many degrees before decreasing Max PWM
@@ -52,9 +48,13 @@ void imuTask();
 
 void gpsStream();
 
+void inputHandler();
+
 Task t1(TASK_IMMEDIATE, TASK_FOREVER, &imuTask, &ts, true);
 
 Task t2(TASK_IMMEDIATE, TASK_FOREVER, &gpsStream, &ts, true);
+
+Task t3(20, TASK_FOREVER, &inputHandler, &ts, true);
 
 //loop time variables in microseconds
 const uint16_t LOOP_TIME = 25;  //40Hz
@@ -95,17 +95,18 @@ const bool invertRoll = true;  //Used for IMU with dual antenna
 
 #define REPORT_INTERVAL 20  //BNO report time, we want to keep reading it quick & offen. Its not timmed to anything just give constant data.
 
-//steering variables
-float steerAngleActual = 0;
-float steerAngleSetPoint = 0;  //the desired angle from AgOpen
-int16_t steeringPosition = 0;  //from steering sensor
-float steerAngleError = 0;     //setpoint - actual
-
 //pwm variables
 int16_t pwmDrive = 0, pwmDisplay = 0;
 float pValue = 0;
 float errorAbs = 0;
 float highLowPerDeg = 0;
+
+//steering variables
+float steerAngleActual = 0;
+float steerAngleSetPoint = 0;  //the desired angle from AgOpen
+int16_t steeringPosition = 0;  //from steering sensor
+float steerAngleError = 0;     //setpoint - actual
+int16_t helloSteerPosition = 0;
 
 //Steer switch button  ***********************************************************************************************************
 uint8_t currentState = 1, reading, previous = 0;
