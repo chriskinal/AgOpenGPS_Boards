@@ -27,7 +27,38 @@ void inputHandler() {
     value = analogRead(LOAD_SENSOR_PIN);
     rawSensor = sensorFilter.updateEstimate(value);
   }
+
+  // Pressure sensor?
+    if (steerConfig.PressureSensor)
+    {
+      sensorSample = rawSensor;
+      sensorSample *= 0.25;
+      sensorReading = sensorReading * 0.6 + sensorSample * 0.4;
+      if (sensorReading >= steerConfig.PulseCountMax)
+      {
+          steerSwitch = 1; // reset values like it turned off
+          currentState = 1;
+          previous = 0;
+      }
+    }
+
+    // Current sensor?
+    if (steerConfig.CurrentSensor)
+    {
+      sensorSample = rawSensor;
+      sensorSample = (abs(775 - sensorSample)) * 0.5;
+      sensorReading = sensorReading * 0.7 + sensorSample * 0.3;    
+      sensorReading = _min(sensorReading, 255);
+
+      if (sensorReading >= steerConfig.PulseCountMax)
+      {
+          steerSwitch = 1; // reset values like it turned off
+          currentState = 1;
+          previous = 0;
+      }
+    }
 }
+
 
 
 void calcSteerAngle() {
