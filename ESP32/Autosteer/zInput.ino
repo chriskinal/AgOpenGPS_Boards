@@ -1,9 +1,8 @@
 #include <SimpleKalmanFilter.h>
 
 //Define sensor pin for current or pressure sensor
-#define CURRENT_SENSOR_PIN 32
-#define PRESSURE_SENSOR_PIN 35
-#define WAS_SENSOR_PIN 34
+#define LOAD_SENSOR_PIN 39
+#define WAS_SENSOR_PIN 36
 
 float rawSensor, rawWAS;
 
@@ -23,18 +22,13 @@ void inputHandler() {
   value = analogRead(WAS_SENSOR_PIN);
   rawWAS = wasFilter.updateEstimate(value);
 
-  // Pressure sensor?
-  if (steerConfig.PressureSensor) {
-    value = analogRead(PRESSURE_SENSOR_PIN);
-    rawSensor = sensorFilter.updateEstimate(value);
-  }
-
-  // Current sensor?
-  else if (steerConfig.CurrentSensor) {
-    value = analogRead(CURRENT_SENSOR_PIN);
+  // Load sensor?
+  if (steerConfig.PressureSensor || steerConfig.CurrentSensor) {
+    value = analogRead(LOAD_SENSOR_PIN);
     rawSensor = sensorFilter.updateEstimate(value);
   }
 }
+
 
 void calcSteerAngle() {
   steeringPosition = rawWAS;

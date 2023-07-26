@@ -22,23 +22,25 @@
 //Connect ground only for cytron, Connect Ground and +5v for IBT2
 
 //Dir1 for Cytron Dir, Both L and R enable for IBT2
-#define DIR1_RL_ENABLE 4
+#define DIR1_RL_ENABLE 14
 
 //PWM1 for Cytron PWM, Left PWM for IBT2
-#define PWM1_LPWM 2
+#define PWM1_LPWM 12
 
 //Not Connected for Cytron, Right PWM for IBT2
-#define PWM2_RPWM 3
+#define PWM2_RPWM 13
 
 //--------------------------- Switch Input Pins ------------------------
-#define STEERSW_PIN 32
-#define WORKSW_PIN 34
-#define REMOTE_PIN 37
+#define STEERSW_PIN 25
+#define WORKSW_PIN 26
+#define REMOTE_PIN 27
 
 #define CONST_180_DIVIDED_BY_PI 57.2957795130823
 
 //How many degrees before decreasing Max PWM
 #define LOW_HIGH_DEGREES 3.0
+
+#define REPORT_INTERVAL 20  //BNO report time, we want to keep reading it quick & offen. Its not timmed to anything just give constant data.
 
 IPAddress myip;
 
@@ -54,7 +56,7 @@ Task t1(TASK_IMMEDIATE, TASK_FOREVER, &imuTask, &ts, true);
 
 Task t2(TASK_IMMEDIATE, TASK_FOREVER, &gpsStream, &ts, true);
 
-Task t3(20, TASK_FOREVER, &inputHandler, &ts, true);
+Task t3(REPORT_INTERVAL, TASK_FOREVER, &inputHandler, &ts, true);
 
 //loop time variables in microseconds
 const uint16_t LOOP_TIME = 25;  //40Hz
@@ -92,9 +94,6 @@ bool GGA_Available = false;  //Do we have GGA on correct port?
 
 const bool invertRoll = true;  //Used for IMU with dual antenna
 
-
-#define REPORT_INTERVAL 20  //BNO report time, we want to keep reading it quick & offen. Its not timmed to anything just give constant data.
-
 //pwm variables
 int16_t pwmDrive = 0, pwmDisplay = 0;
 float pValue = 0;
@@ -114,7 +113,6 @@ uint8_t pulseCount = 0;  // Steering Wheel Encoder
 bool encEnable = false;  //debounce flag
 uint8_t thisEnc = 0, lastEnc = 0;
 
-unsigned int portMy = 5120;  // port of this module
 
 //Variables for settings
 struct Storage {
