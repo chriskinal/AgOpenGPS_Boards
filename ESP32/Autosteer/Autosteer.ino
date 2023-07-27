@@ -40,7 +40,8 @@
 //How many degrees before decreasing Max PWM
 #define LOW_HIGH_DEGREES 3.0
 
-#define REPORT_INTERVAL 20  //BNO report time, we want to keep reading it quick & offen. Its not timmed to anything just give constant data.
+#define INPUT_INTERVAL 200  //read GPIO millisec 5hz
+#define AUTOSTEER_INTERVAL 20  //read GPIO millisec 50hz
 
 IPAddress myip;
 
@@ -52,16 +53,18 @@ void gpsStream();
 
 void inputHandler();
 
+void autosteerLoop();
+
 Task t1(TASK_IMMEDIATE, TASK_FOREVER, &imuTask, &ts, true);
 
 Task t2(TASK_IMMEDIATE, TASK_FOREVER, &gpsStream, &ts, true);
 
-Task t3(REPORT_INTERVAL, TASK_FOREVER, &inputHandler, &ts, true);
+Task t3(INPUT_INTERVAL, TASK_FOREVER, &inputHandler, &ts, true);
+
+Task t4(AUTOSTEER_INTERVAL, TASK_FOREVER, &autosteerLoop, &ts, true);
 
 //loop time variables in microseconds
 const uint16_t LOOP_TIME = 25;  //40Hz
-uint32_t autsteerLastTime = LOOP_TIME;
-uint32_t currentTime = LOOP_TIME;
 const uint16_t WATCHDOG_THRESHOLD = 100;
 const uint16_t WATCHDOG_FORCE_VALUE = WATCHDOG_THRESHOLD + 2;  // Should be greater than WATCHDOG_THRESHOLD
 uint8_t watchdogTimer = WATCHDOG_FORCE_VALUE;
@@ -175,10 +178,6 @@ void autosteerSetup() {
     ledcSetup(PWM2_RPWM, 3921, 8);
   }
 
-  //keep pulled high and drag low to activate, noise free safe
-  pinMode(WORKSW_PIN, INPUT_PULLUP);
-  pinMode(STEERSW_PIN, INPUT_PULLUP);
-  pinMode(REMOTE_PIN, INPUT_PULLUP);
   pinMode(DIR1_RL_ENABLE, OUTPUT);
 
   // Disable digital inputs for analog input pins
@@ -222,6 +221,8 @@ void setup() {
   initHandler();
 
   initIMU();
+
+  initInput();
 
   autosteerSetup();
 }

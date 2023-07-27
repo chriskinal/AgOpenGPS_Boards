@@ -14,6 +14,11 @@ int value = 0;
 
 
 void initInput() {
+
+  //keep pulled high and drag low to activate, noise free safe
+  pinMode(WORKSW_PIN, INPUT_PULLUP);
+  pinMode(STEERSW_PIN, INPUT_PULLUP);
+  pinMode(REMOTE_PIN, INPUT_PULLUP);
 }
 
 void inputHandler() {
