@@ -1,9 +1,5 @@
 #include <SimpleKalmanFilter.h>
 
-//Define sensor pin for current or pressure sensor
-#define LOAD_SENSOR_PIN 39
-#define WAS_SENSOR_PIN 36
-
 float rawSensor, rawWAS;
 
 SimpleKalmanFilter sensorFilter(2, 2, 0.01);

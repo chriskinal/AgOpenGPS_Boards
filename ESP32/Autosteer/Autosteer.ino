@@ -1,7 +1,6 @@
 #include <Arduino.h>
 #include <TaskScheduler.h>
 #include <WiFiManager.h>
-#include <AsyncUDP.h>
 #include <elapsedMillis.h>
 #include <EEPROM.h>
 #include <Wire.h>
@@ -40,8 +39,18 @@
 //How many degrees before decreasing Max PWM
 #define LOW_HIGH_DEGREES 3.0
 
-#define INPUT_INTERVAL 200  //read GPIO millisec 5hz
-#define AUTOSTEER_INTERVAL 20  //read GPIO millisec 50hz
+#define AUTOSTEER_INTERVAL 100  //read GPIO millisec 50hz
+
+//loop time variables in microseconds
+const uint16_t LOOP_TIME = 20;  //40Hz
+const uint16_t WATCHDOG_THRESHOLD = 100;
+const uint16_t WATCHDOG_FORCE_VALUE = WATCHDOG_THRESHOLD + 2;  // Should be greater than WATCHDOG_THRESHOLD
+uint8_t watchdogTimer = WATCHDOG_FORCE_VALUE;
+
+//Define sensor pin for current or pressure sensor
+#define LOAD_SENSOR_PIN 39
+#define WAS_SENSOR_PIN 36
+
 
 IPAddress myip;
 
@@ -55,19 +64,15 @@ void inputHandler();
 
 void autosteerLoop();
 
+void autoSteerPacketPerser();
+
 Task t1(TASK_IMMEDIATE, TASK_FOREVER, &imuTask, &ts, true);
 
 Task t2(TASK_IMMEDIATE, TASK_FOREVER, &gpsStream, &ts, true);
 
-Task t3(INPUT_INTERVAL, TASK_FOREVER, &inputHandler, &ts, true);
+Task t3(AUTOSTEER_INTERVAL, TASK_FOREVER, &inputHandler, &ts, true);
 
-Task t4(AUTOSTEER_INTERVAL, TASK_FOREVER, &autosteerLoop, &ts, true);
-
-//loop time variables in microseconds
-const uint16_t LOOP_TIME = 25;  //40Hz
-const uint16_t WATCHDOG_THRESHOLD = 100;
-const uint16_t WATCHDOG_FORCE_VALUE = WATCHDOG_THRESHOLD + 2;  // Should be greater than WATCHDOG_THRESHOLD
-uint8_t watchdogTimer = WATCHDOG_FORCE_VALUE;
+Task t4(LOOP_TIME, TASK_FOREVER, &autosteerLoop, &ts, true);
 
 uint8_t aog2Count = 0;
 float sensorReading;
@@ -154,12 +159,6 @@ void steerSettingsInit() {
   highLowPerDeg = ((float)(steerSettings.highPWM - steerSettings.lowPWM)) / LOW_HIGH_DEGREES;
 }
 
-void steerConfigInit() {
-  if (steerConfig.CytronDriver) {
-    pinMode(PWM2_RPWM, OUTPUT);
-  }
-}
-
 void autosteerSetup() {
   //PWM rate settings. Set them both the same!!!!
   /*  PWM Frequency ->
@@ -196,8 +195,6 @@ void autosteerSetup() {
     EEPROM.get(40, steerConfig);
   }
 
-  steerSettingsInit();
-
   if (Autosteer_running) {
     Serial.println("Autosteer running, waiting for AgOpenGPS");
     // Autosteer Led goes Red if ADS1115 is found
@@ -228,6 +225,6 @@ void setup() {
 }
 
 void loop() {
-
+  autoSteerPacketPerser();
   ts.execute();
 }

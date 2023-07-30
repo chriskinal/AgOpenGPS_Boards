@@ -63,6 +63,9 @@ void autosteerLoop()
     switchByte |= (steerSwitch << 1);   //put steerswitch status in bit 1 position
     switchByte |= workSwitch;
 
+    calcSteerAngle();
+    calcSteeringPID();  //do the pid
+    
     //Ackerman fix
     if (steerAngleActual < 0) steerAngleActual = (steerAngleActual * steerSettings.AckermanFix);
 
@@ -73,8 +76,6 @@ void autosteerLoop()
 
       steerAngleError = steerAngleActual - steerAngleSetPoint;   //calculate the steering error
       //if (abs(steerAngleError)< steerSettings.lowPWM) steerAngleError = 0;
-
-      calcSteeringPID();  //do the pid
       motorDrive();       //out to motors the pwm value
     }
     else

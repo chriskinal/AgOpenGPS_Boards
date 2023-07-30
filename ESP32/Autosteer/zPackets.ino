@@ -1,4 +1,8 @@
-uint8_t* autoSteerUdpData;
+#include <WiFi.h>
+#include <WiFiUdp.h>
+
+//uint8_t* autoSteerUdpData;
+char autoSteerUdpData[255];
 //Heart beat hello AgIO
 uint8_t helloFromIMU[] = { 128, 129, 121, 121, 5, 0, 0, 0, 0, 0, 71 };
 uint8_t helloFromAutoSteer[] = { 0x80, 0x81, 126, 126, 5, 0, 0, 0, 0, 0, 71 };
@@ -16,30 +20,26 @@ unsigned int AOGAutoSteerPort = 8888;             // port Autosteer data from AO
 unsigned int portDestination = 9999;              // Port of AOG that listens
 IPAddress ipDes = IPAddress(255, 255, 255, 255);  //AOG IP
 
-AsyncUDP udp;
-AsyncUDP ntrip;
-
+WiFiUDP Udp;
+WiFiUDP ntrip;
 void startUDP() {
-
+  /*
   if (udp.listen(AOGAutoSteerPort)) {
-    Serial.print("UDP Listening on IP: ");
-    Serial.println(WiFi.localIP());
     udp.onPacket([](AsyncUDPPacket packet) {
       autoSteerPacketPerser(packet);
     });
   }
 
   if (ntrip.listen(AOGNtripPort)) {
-    Serial.print("UDP Listening on IP: ");
-    Serial.println(WiFi.localIP());
     ntrip.onPacket([](AsyncUDPPacket packet) {
       ntripPacketProxy(packet);
     });
-  }
+  }*/
 }
 
-void initWifi(){
-   // Create WiFiManager object
+void initWifi() {
+  WiFi.mode(WIFI_STA);
+  // Create WiFiManager object
   WiFiManager wfm;
   // Supress Debug information
   wfm.setDebugOutput(false);
@@ -53,27 +53,34 @@ void initWifi(){
     delay(1000);
   }
 
+  WiFi.setSleep(false);
   myip = WiFi.localIP();
   // Connected!
   Serial.println("WiFi connected");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
-  startUDP();
+  //startUDP();
+  Udp.begin(AOGAutoSteerPort);
+  ntrip.begin(AOGNtripPort);
 }
 
-void ntripPacketProxy(AsyncUDPPacket packet) {
-  if (packet.length() > 0) {
-    Serial2.write(packet.data(), packet.length());
+//void autoSteerPacketPerser(AsyncUDPPacket packet) {
+void autoSteerPacketPerser() {
+  int packetSize = ntrip.parsePacket();
+  //NTRIP proxy
+  if (packetSize > 0) {
+    ntrip.read(autoSteerUdpData, packetSize);
+    Serial2.write(autoSteerUdpData, packetSize);
   }
-}
 
-void autoSteerPacketPerser(AsyncUDPPacket packet) {
-  if (packet.length() < 5){
-    Serial.println("Packet lenght error!!");
+  packetSize = Udp.parsePacket();
+
+  if (packetSize < 5) {
     return;
   }
-  autoSteerUdpData = packet.data();
+  //autoSteerUdpData = packet.data();
+  Udp.read(autoSteerUdpData, packetSize);
   if (autoSteerUdpData[0] == 0x80 && autoSteerUdpData[1] == 0x81 && autoSteerUdpData[2] == 0x7F)  //Data
   {
     switch (autoSteerUdpData[3]) {
@@ -93,8 +100,8 @@ void autoSteerPacketPerser(AsyncUDPPacket packet) {
           //Bit 8,9    set point steer angle * 100 is sent
           steerAngleSetPoint = ((float)(autoSteerUdpData[8] | ((int8_t)autoSteerUdpData[9]) << 8)) * 0.01;  //high low bytes
 
-          //Serial.print("steerAngleSetPoint: ");
-          //Serial.println(steerAngleSetPoint);
+          Serial.print("steerAngleSetPoint: ");
+          Serial.println(steerAngleSetPoint);
 
           //Serial.println(gpsSpeed);
 
@@ -104,8 +111,6 @@ void autoSteerPacketPerser(AsyncUDPPacket packet) {
           {
             watchdogTimer = 0;  //reset watchdog
           }
-          //TEMP TEST
-          calcSteerAngle();
 
           //Bit 10 Tram
           tram = autoSteerUdpData[10];
@@ -172,14 +177,14 @@ void autoSteerPacketPerser(AsyncUDPPacket packet) {
             return;
           }
           //PID values
-          steerSettings.Kp = ((float)autoSteerUdpData[5]);  // read Kp from AgOpenGPS
-          steerSettings.highPWM = autoSteerUdpData[6];  // read high pwm
+          steerSettings.Kp = ((float)autoSteerUdpData[5]);    // read Kp from AgOpenGPS
+          steerSettings.highPWM = autoSteerUdpData[6];        // read high pwm
           steerSettings.lowPWM = (float)autoSteerUdpData[7];  // read lowPWM from AgOpenGPS
-          steerSettings.minPWM = autoSteerUdpData[8];  //read the minimum amount of PWM for instant on
+          steerSettings.minPWM = autoSteerUdpData[8];         //read the minimum amount of PWM for instant on
           float temp = (float)steerSettings.minPWM * 1.2;
           steerSettings.lowPWM = (byte)temp;
-          steerSettings.steerSensorCounts = autoSteerUdpData[9];  //sent as setting displayed in AOG
-          steerSettings.wasOffset = (autoSteerUdpData[10]);  //read was zero offset Lo
+          steerSettings.steerSensorCounts = autoSteerUdpData[9];   //sent as setting displayed in AOG
+          steerSettings.wasOffset = (autoSteerUdpData[10]);        //read was zero offset Lo
           steerSettings.wasOffset |= (autoSteerUdpData[11] << 8);  //read was zero offset Hi
           steerSettings.AckermanFix = (float)autoSteerUdpData[12] * 0.01;
 
@@ -234,9 +239,7 @@ void autoSteerPacketPerser(AsyncUDPPacket packet) {
           //autoSteerUdpData[13];
 
           EEPROM.put(40, steerConfig);
-
           // Re-Init
-          steerConfigInit();
         }
       case 200:
         {  // Hello from AgIO
@@ -253,16 +256,12 @@ void autoSteerPacketPerser(AsyncUDPPacket packet) {
 
             sendUdp(helloFromAutoSteer, sizeof(helloFromAutoSteer));
           }
-          /*  PANDA....
-          if (useBNO08x) {
-            sendUdp(helloFromIMU, sizeof(helloFromIMU));
-          }*/
         }
       case 202:
         {
           //make really sure this is the reply pgn
           if (autoSteerUdpData[4] == 3 && autoSteerUdpData[5] == 202 && autoSteerUdpData[6] == 202) {
-            ipDes = packet.remoteIP();
+            ipDes = Udp.remoteIP();
             //hello from AgIO
             uint8_t scanReply[] = { 128, 129, 126, 203, 7,
                                     myip[0], myip[1], myip[2], myip[3],
@@ -279,14 +278,13 @@ void autoSteerPacketPerser(AsyncUDPPacket packet) {
           }
         }
     }
-  }
-  else{
+  } else {
     Serial.println("Unknown packet!!!");
   }
 }
 
 void sendUdp(uint8_t* data, uint8_t datalen) {
-  AsyncUDPMessage m = AsyncUDPMessage(datalen);
-  m.write(data, datalen);
-  udp.sendTo(m, ipDes, 9999);
+  Udp.beginPacket(ipDes, 9999);
+  Udp.write(data, datalen);
+  Udp.endPacket();
 }
