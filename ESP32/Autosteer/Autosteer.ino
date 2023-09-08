@@ -70,9 +70,9 @@ Task t1(TASK_IMMEDIATE, TASK_FOREVER, &imuTask, &ts, true);
 
 Task t2(TASK_IMMEDIATE, TASK_FOREVER, &gpsStream, &ts, true);
 
-Task t3(AUTOSTEER_INTERVAL, TASK_FOREVER, &inputHandler, &ts, true);
+Task t3(LOOP_TIME, TASK_FOREVER, &inputHandler, &ts, true);
 
-Task t4(LOOP_TIME, TASK_FOREVER, &autosteerLoop, &ts, true);
+Task t4(AUTOSTEER_INTERVAL, TASK_FOREVER, &autosteerLoop, &ts, true);
 
 uint8_t aog2Count = 0;
 float sensorReading;

@@ -1,8 +1,22 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
+#include <ESPmDNS.h>
+
+#define WM_MDNS
+
+//#define UDP;
+
+// Set your Static IP address
+IPAddress local_IP(192, 168, 0, 184);
+// Set your Gateway IP address
+IPAddress gateway(192, 168, 0, 1);
+
+IPAddress subnet(255, 255, 255, 0);
+IPAddress primaryDNS(8, 8, 8, 8);    //optional
+IPAddress secondaryDNS(8, 8, 4, 4);  //optional
 
 //uint8_t* autoSteerUdpData;
-char autoSteerUdpData[255];
+uint8_t autoSteerUdpData[255];
 //Heart beat hello AgIO
 uint8_t helloFromIMU[] = { 128, 129, 121, 121, 5, 0, 0, 0, 0, 0, 71 };
 uint8_t helloFromAutoSteer[] = { 0x80, 0x81, 126, 126, 5, 0, 0, 0, 0, 0, 71 };
@@ -22,8 +36,10 @@ IPAddress ipDes = IPAddress(255, 255, 255, 255);  //AOG IP
 
 WiFiUDP Udp;
 WiFiUDP ntrip;
-void startUDP() {
-  /*
+WiFiClient localClient;
+int packetSize;
+
+/*void startUDP() {
   if (udp.listen(AOGAutoSteerPort)) {
     udp.onPacket([](AsyncUDPPacket packet) {
       autoSteerPacketPerser(packet);
@@ -34,17 +50,23 @@ void startUDP() {
     ntrip.onPacket([](AsyncUDPPacket packet) {
       ntripPacketProxy(packet);
     });
-  }*/
-}
+  }
+}*/
 
 void initWifi() {
   WiFi.mode(WIFI_STA);
   // Create WiFiManager object
   WiFiManager wfm;
   // Supress Debug information
-  wfm.setDebugOutput(false);
+  wfm.setDebugOutput(true);
+  // needed to allow setting hostname
 
-  if (!wfm.autoConnect("AGOpenGPS Autosteer")) {
+  //set static ip
+  //wfm.setSTAStaticIPConfig(IPAddress(192, 168, 0, 184), IPAddress(192, 168, 0, 1), IPAddress(255,255,255,0)); // set static ip,gw,sn
+  //wfm.setShowStaticFields(true); // force show static ip fields
+  wfm.setShowDnsFields(true);  // force show dns field always
+
+  if (!wfm.autoConnect("AGOpenGPS")) {
     // Did not connect, print error message
     Serial.println("failed to connect and hit timeout");
 
@@ -54,33 +76,54 @@ void initWifi() {
   }
 
   WiFi.setSleep(false);
+
   myip = WiFi.localIP();
   // Connected!
   Serial.println("WiFi connected");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
-
-  //startUDP();
+#if defined(UDP)
   Udp.begin(AOGAutoSteerPort);
   ntrip.begin(AOGNtripPort);
+#endif
 }
 
 //void autoSteerPacketPerser(AsyncUDPPacket packet) {
 void autoSteerPacketPerser() {
-  int packetSize = ntrip.parsePacket();
+#if defined(UDP)
+  packetSize = ntrip.parsePacket();
   //NTRIP proxy
   if (packetSize > 0) {
     ntrip.read(autoSteerUdpData, packetSize);
     Serial2.write(autoSteerUdpData, packetSize);
   }
-
   packetSize = Udp.parsePacket();
-
   if (packetSize < 5) {
     return;
   }
-  //autoSteerUdpData = packet.data();
   Udp.read(autoSteerUdpData, packetSize);
+
+#else
+  if (!localClient.connected()) {
+    if (localClient.connect(IPAddress(192, 168, 0, 24), 11000)) {
+      Serial.println("localClient connected");
+    } else {
+      return;
+    }
+  }
+  if (localClient.connected()) {
+    packetSize = localClient.available();
+    if (packetSize < 5) {
+      return;
+    }
+    localClient.read(autoSteerUdpData, packetSize);
+    localClient.flush();
+  }
+#endif
+
+  //autoSteerUdpData = packet.data();
+
+  //Udp.read(autoSteerUdpData, packetSize);
   if (autoSteerUdpData[0] == 0x80 && autoSteerUdpData[1] == 0x81 && autoSteerUdpData[2] == 0x7F)  //Data
   {
     switch (autoSteerUdpData[3]) {
@@ -100,8 +143,8 @@ void autoSteerPacketPerser() {
           //Bit 8,9    set point steer angle * 100 is sent
           steerAngleSetPoint = ((float)(autoSteerUdpData[8] | ((int8_t)autoSteerUdpData[9]) << 8)) * 0.01;  //high low bytes
 
-          Serial.print("steerAngleSetPoint: ");
-          Serial.println(steerAngleSetPoint);
+          //Serial.print("steerAngleSetPoint: ");
+          //Serial.println(steerAngleSetPoint);
 
           //Serial.println(gpsSpeed);
 
@@ -284,7 +327,14 @@ void autoSteerPacketPerser() {
 }
 
 void sendUdp(uint8_t* data, uint8_t datalen) {
-  Udp.beginPacket(ipDes, 9999);
-  Udp.write(data, datalen);
-  Udp.endPacket();
+  #if defined(UDP)
+    Udp.beginPacket(ipDes, 9999);
+    Udp.write(data, datalen);
+    Udp.endPacket();
+  #else
+    if(localClient.connected()) {
+      localClient.write(data, datalen);
+      localClient.flush();
+    }
+  #endif
 }

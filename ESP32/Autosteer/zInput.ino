@@ -22,7 +22,7 @@ void inputHandler() {
   //WAS sensore
   value = analogRead(WAS_SENSOR_PIN);
   rawWAS = wasFilter.updateEstimate(value);
-
+Serial.println(rawWAS);
   // Load sensor?
   if (steerConfig.PressureSensor || steerConfig.CurrentSensor) {
     value = analogRead(LOAD_SENSOR_PIN);
