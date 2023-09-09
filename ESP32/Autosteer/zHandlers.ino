@@ -300,7 +300,7 @@ void BuildNmea(void) {
   strcat(nmea, "\r\n");
 
   int len = strlen(nmea);
-  sendUdp((uint8_t*)nmea, len);
+  sendData((uint8_t*)nmea, len);
 }
 
 void CalculateChecksum(void) {

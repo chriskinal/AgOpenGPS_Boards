@@ -183,6 +183,7 @@ void autosteerSetup() {
   //pinMode(CURRENT_SENSOR_PIN, INPUT_DISABLE);
   //pinMode(PRESSURE_SENSOR_PIN, INPUT_DISABLE);
 
+  EEPROM.begin(60);
   EEPROM.get(0, EEread);  // read identifier
 
   if (EEread != EEP_Ident)  // check on first start and write EEPROM
@@ -190,10 +191,12 @@ void autosteerSetup() {
     EEPROM.put(0, EEP_Ident);
     EEPROM.put(10, steerSettings);
     EEPROM.put(40, steerConfig);
+    EEPROM.commit();
   } else {
     EEPROM.get(10, steerSettings);  // read the Settings
     EEPROM.get(40, steerConfig);
   }
+
 
   if (Autosteer_running) {
     Serial.println("Autosteer running, waiting for AgOpenGPS");
