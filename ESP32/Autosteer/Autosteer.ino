@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <TaskScheduler.h>
-#include <WiFiManager.h>
 #include <elapsedMillis.h>
 #include <EEPROM.h>
 #include <Wire.h>
@@ -50,9 +49,6 @@ uint8_t watchdogTimer = WATCHDOG_FORCE_VALUE;
 //Define sensor pin for current or pressure sensor
 #define LOAD_SENSOR_PIN 39
 #define WAS_SENSOR_PIN 36
-
-
-IPAddress myip;
 
 Scheduler ts;
 
@@ -215,8 +211,6 @@ void setup() {
   // Setup Serial Monitor
   Serial.begin(115200);
   Serial2.begin(115200);
-
-  initWifi();
 
   initHandler();
 

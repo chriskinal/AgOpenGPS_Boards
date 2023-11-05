@@ -1,65 +1,24 @@
-#include <WiFi.h>
-#include <WiFiUdp.h>
 
 
 uint8_t autoSteerData[255];
 //Heart beat hello AgIO
-uint8_t helloFromIMU[] = { 128, 129, 121, 121, 5, 0, 0, 0, 0, 0, 71 };
-uint8_t helloFromAutoSteer[] = { 0x80, 0x81, 126, 126, 5, 0, 0, 0, 0, 0, 71 };
+uint8_t helloFromIMU[] = { 128, 129, 121, 121, 5, 0, 0, 0, 0, 0, 71, 0x0D, 0x0A};
+uint8_t helloFromAutoSteer[] = { 0x80, 0x81, 126, 126, 5, 0, 0, 0, 0, 0, 71, 0x0D, 0x0A };
 
 //fromAutoSteerData FD 253 - ActualSteerAngle*100 -5,6, SwitchByte-7, pwmDisplay-8
-uint8_t PGN_253[] = { 0x80, 0x81, 126, 0xFD, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0xCC };
-int8_t PGN_253_Size = sizeof(PGN_253) - 1;
+uint8_t PGN_253[] = { 0x80, 0x81, 126, 0xFD, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0xCC, 0x0D, 0x0A };
+int8_t PGN_253_Size = sizeof(PGN_253) - 3;
 
 //fromAutoSteerData FD 250 - sensor values etc
-uint8_t PGN_250[] = { 0x80, 0x81, 126, 0xFA, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0xCC };
-int8_t PGN_250_Size = sizeof(PGN_250) - 1;
+uint8_t PGN_250[] = { 0x80, 0x81, 126, 0xFA, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0xCC, 0x0D, 0x0A };
+int8_t PGN_250_Size = sizeof(PGN_250) - 3;
 
-unsigned int AOGNtripPort = 2233;                 // port NTRIP data from AOG comes in
-unsigned int AOGAutoSteerPort = 8888;             // port Autosteer data from AOG comes in
-unsigned int portDestination = 9999;              // Port of AOG that listens
-IPAddress ipDes = IPAddress(255, 255, 255, 255);  //AOG IP
-
-WiFiUDP ntrip;
-WiFiClient localClient;
 int packetSize;
 
-void initWifi() {
-  WiFi.mode(WIFI_STA);
-  // Create WiFiManager object
-  WiFiManager wfm;
-  // Supress Debug information
-  wfm.setDebugOutput(true);
-  // needed to allow setting hostname
 
-  //set static ip
-  //wfm.setSTAStaticIPConfig(IPAddress(192, 168, 0, 184), IPAddress(192, 168, 0, 1), IPAddress(255,255,255,0)); // set static ip,gw,sn
-  //wfm.setShowStaticFields(true); // force show static ip fields
-  wfm.setShowDnsFields(true);  // force show dns field always
-
-  if (!wfm.autoConnect("AGOpenGPS")) {
-    // Did not connect, print error message
-    Serial.println("failed to connect and hit timeout");
-
-    // Reset and try again
-    ESP.restart();
-    delay(1000);
-  }
-
-  WiFi.setSleep(false);
-
-  myip = WiFi.localIP();
-  // Connected!
-  Serial.println("WiFi connected");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
-
-  ntrip.begin(AOGNtripPort);
-
-}
 
 //void autoSteerPacketPerser(AsyncUDPPacket packet) {
-void autoSteerPacketPerser() {
+void autoSteerPacketPerser() {/*
   packetSize = ntrip.parsePacket();
   //NTRIP proxy
   if (packetSize > 0) {
@@ -81,10 +40,14 @@ void autoSteerPacketPerser() {
     }
     localClient.read(autoSteerData, packetSize);
     localClient.flush();
-  }
+  }*/
 
   //autoSteerUdpData = packet.data();
-
+  int size = Serial.available();
+  if (size <5){
+    return;
+  }
+  Serial.readBytes(autoSteerData, size);
   //Udp.read(autoSteerUdpData, packetSize);
   if (autoSteerData[0] == 0x80 && autoSteerData[1] == 0x81 && autoSteerData[2] == 0x7F)  //Data
   {
@@ -268,8 +231,8 @@ void autoSteerPacketPerser() {
           if (autoSteerData[4] == 3 && autoSteerData[5] == 202 && autoSteerData[6] == 202) {
             //hello from AgIO
             uint8_t scanReply[] = { 128, 129, 126, 203, 7,
-                                    myip[0], myip[1], myip[2], myip[3],
-                                    myip[0], myip[1], myip[2], 23 };
+                                    0, 0, 0, 0,
+                                    0, 0, 0, 23 };
 
             //checksum
             int16_t CK_A = 0;
@@ -288,8 +251,6 @@ void autoSteerPacketPerser() {
 }
 
 void sendData(uint8_t* data, uint8_t datalen) {
-    if(localClient.connected()) {
-      localClient.write(data, datalen);
-      localClient.flush();
-    }
+  Serial.write(data, datalen);
+  Serial.print("\r\n");
 }
