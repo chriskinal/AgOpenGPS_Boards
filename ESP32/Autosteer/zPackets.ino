@@ -1,8 +1,11 @@
 
 
-uint8_t autoSteerData[255];
+uint8_t data[16384];
+uint8_t buffer[4096];
+int bufferIndex = 0;
+
 //Heart beat hello AgIO
-uint8_t helloFromIMU[] = { 128, 129, 121, 121, 5, 0, 0, 0, 0, 0, 71, 0x0D, 0x0A};
+uint8_t helloFromIMU[] = { 128, 129, 121, 121, 5, 0, 0, 0, 0, 0, 71, 0x0D, 0x0A };
 uint8_t helloFromAutoSteer[] = { 0x80, 0x81, 126, 126, 5, 0, 0, 0, 0, 0, 71, 0x0D, 0x0A };
 
 //fromAutoSteerData FD 253 - ActualSteerAngle*100 -5,6, SwitchByte-7, pwmDisplay-8
@@ -16,62 +19,51 @@ int8_t PGN_250_Size = sizeof(PGN_250) - 3;
 int packetSize;
 
 
+void autoSteerPacketPerser() {
 
-//void autoSteerPacketPerser(AsyncUDPPacket packet) {
-void autoSteerPacketPerser() {/*
-  packetSize = ntrip.parsePacket();
-  //NTRIP proxy
-  if (packetSize > 0) {
-    ntrip.read(autoSteerData, packetSize);
-    Serial2.write(autoSteerData, packetSize);
-  }
-
-  if (!localClient.connected()) {
-    if (localClient.connect(IPAddress(192, 168, 0, 24), 11000)) {
-      Serial.println("localClient connected");
-    } else {
-      return;
-    }
-  }
-  if (localClient.connected()) {
-    packetSize = localClient.available();
-    if (packetSize < 5) {
-      return;
-    }
-    localClient.read(autoSteerData, packetSize);
-    localClient.flush();
-  }*/
-
-  //autoSteerUdpData = packet.data();
   int size = Serial.available();
-  if (size <5){
+  if (size < 5) {
     return;
   }
-  Serial.readBytes(autoSteerData, size);
-  //Udp.read(autoSteerUdpData, packetSize);
-  if (autoSteerData[0] == 0x80 && autoSteerData[1] == 0x81 && autoSteerData[2] == 0x7F)  //Data
+
+  Serial.readBytes(buffer, size);
+  for (int i = 0; i < size; i++) {
+    data[bufferIndex] = buffer[i];
+    bufferIndex++;
+  }
+
+  for (int i = 0; i < bufferIndex - 1; i++) {
+    if (data[i] == 13 && data[i + 1] == 10) {
+      parsePacket(data, i);
+      for (int x = 0; x < bufferIndex - i - 1; x++) {
+        data[x] = data[i + 2 + x];
+      }
+      bufferIndex -= i + 2;
+      i = -1;
+    }
+  }
+}
+
+
+void parsePacket(uint8_t* packet, int size) {
+  if (packet[0] == 0x80 && packet[1] == 0x81 && packet[2] == 0x7F)  //Data
   {
-    switch (autoSteerData[3]) {
+    switch (packet[3]) {
       case 0xFE:
         {
           if (!Autosteer_running) {
             break;
           }
-          gpsSpeed = ((float)(autoSteerData[5] | autoSteerData[6] << 8)) * 0.1;
+          gpsSpeed = ((float)(packet[5] | packet[6] << 8)) * 0.1;
           gpsSpeedUpdateTimer = 0;
 
           prevGuidanceStatus = guidanceStatus;
 
-          guidanceStatus = autoSteerData[7];
+          guidanceStatus = packet[7];
           guidanceStatusChanged = (guidanceStatus != prevGuidanceStatus);
 
           //Bit 8,9    set point steer angle * 100 is sent
-          steerAngleSetPoint = ((float)(autoSteerData[8] | ((int8_t)autoSteerData[9]) << 8)) * 0.01;  //high low bytes
-
-          //Serial.print("steerAngleSetPoint: ");
-          //Serial.println(steerAngleSetPoint);
-
-          //Serial.println(gpsSpeed);
+          steerAngleSetPoint = ((float)(packet[8] | ((int8_t)packet[9]) << 8)) * 0.01;  //high low bytes
 
           if ((bitRead(guidanceStatus, 0) == 0) || (gpsSpeed < 0.1) || (steerSwitch == 1)) {
             watchdogTimer = WATCHDOG_FORCE_VALUE;  //turn off steering motor
@@ -81,13 +73,13 @@ void autoSteerPacketPerser() {/*
           }
 
           //Bit 10 Tram
-          tram = autoSteerData[10];
+          tram = packet[10];
 
           //Bit 11
-          relay = autoSteerData[11];
+          relay = packet[11];
 
           //Bit 12
-          relayHi = autoSteerData[12];
+          relayHi = packet[12];
 
           //----------------------------------------------------------------------------
           //Serial Send to agopenGPS
@@ -145,16 +137,16 @@ void autoSteerPacketPerser() {/*
             return;
           }
           //PID values
-          steerSettings.Kp = ((float)autoSteerData[5]);    // read Kp from AgOpenGPS
-          steerSettings.highPWM = autoSteerData[6];        // read high pwm
-          steerSettings.lowPWM = (float)autoSteerData[7];  // read lowPWM from AgOpenGPS
-          steerSettings.minPWM = autoSteerData[8];         //read the minimum amount of PWM for instant on
+          steerSettings.Kp = ((float)packet[5]);    // read Kp from AgOpenGPS
+          steerSettings.highPWM = packet[6];        // read high pwm
+          steerSettings.lowPWM = (float)packet[7];  // read lowPWM from AgOpenGPS
+          steerSettings.minPWM = packet[8];         //read the minimum amount of PWM for instant on
           float temp = (float)steerSettings.minPWM * 1.2;
           steerSettings.lowPWM = (byte)temp;
-          steerSettings.steerSensorCounts = autoSteerData[9];   //sent as setting displayed in AOG
-          steerSettings.wasOffset = (autoSteerData[10]);        //read was zero offset Lo
-          steerSettings.wasOffset |= (autoSteerData[11] << 8);  //read was zero offset Hi
-          steerSettings.AckermanFix = (float)autoSteerData[12] * 0.01;
+          steerSettings.steerSensorCounts = packet[9];   //sent as setting displayed in AOG
+          steerSettings.wasOffset = (packet[10]);        //read was zero offset Lo
+          steerSettings.wasOffset |= (packet[11] << 8);  //read was zero offset Hi
+          steerSettings.AckermanFix = (float)packet[12] * 0.01;
 
           //crc
           //autoSteerUdpData[13];
@@ -168,7 +160,7 @@ void autoSteerPacketPerser() {/*
         }
       case 251:  //251 FB - SteerConfig
         {
-          uint8_t sett = autoSteerData[5];  //setting0
+          uint8_t sett = packet[5];  //setting0
 
           if (bitRead(sett, 0)) steerConfig.InvertWAS = 1;
           else steerConfig.InvertWAS = 0;
@@ -187,12 +179,12 @@ void autoSteerPacketPerser() {/*
           if (bitRead(sett, 7)) steerConfig.ShaftEncoder = 1;
           else steerConfig.ShaftEncoder = 0;
 
-          steerConfig.PulseCountMax = autoSteerData[6];
+          steerConfig.PulseCountMax = packet[6];
 
           //was speed
           //autoSteerUdpData[7];
 
-          sett = autoSteerData[8];  //setting1 - Danfoss valve etc
+          sett = packet[8];  //setting1 - Danfoss valve etc
 
           if (bitRead(sett, 0)) steerConfig.IsDanfoss = 1;
           else steerConfig.IsDanfoss = 0;
@@ -228,7 +220,7 @@ void autoSteerPacketPerser() {/*
       case 202:
         {
           //make really sure this is the reply pgn
-          if (autoSteerData[4] == 3 && autoSteerData[5] == 202 && autoSteerData[6] == 202) {
+          if (packet[4] == 3 && packet[5] == 202 && packet[6] == 202) {
             //hello from AgIO
             uint8_t scanReply[] = { 128, 129, 126, 203, 7,
                                     0, 0, 0, 0,
@@ -244,13 +236,22 @@ void autoSteerPacketPerser() {/*
             sendData(scanReply, sizeof(scanReply));
           }
         }
+      case 100: //NTRIP
+        {
+          uint8_t NTRIPData[size-4];
+          
+          for (int i = 4; i <size ;i++ )
+          {
+            NTRIPData[i-4] = packet[i];
+          }
+          Serial2.write(NTRIPData, size-4);
+        }
     }
   } else {
-    Serial.println("Unknown packet!!!");
+    Serial2.println("Unknown packet!!!");
   }
 }
 
 void sendData(uint8_t* data, uint8_t datalen) {
   Serial.write(data, datalen);
-  Serial.print("\r\n");
 }
