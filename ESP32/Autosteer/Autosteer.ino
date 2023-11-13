@@ -20,18 +20,18 @@
 //Connect ground only for cytron, Connect Ground and +5v for IBT2
 
 //Dir1 for Cytron Dir, Both L and R enable for IBT2
-#define DIR1_RL_ENABLE 14
+#define DIR1_RL_ENABLE 27
 
 //PWM1 for Cytron PWM, Left PWM for IBT2
-#define PWM1_LPWM 12
+#define PWM1_LPWM 13
 
 //Not Connected for Cytron, Right PWM for IBT2
-#define PWM2_RPWM 13
+#define PWM2_RPWM 14
 
 //--------------------------- Switch Input Pins ------------------------
 #define STEERSW_PIN 25
 #define WORKSW_PIN 26
-#define REMOTE_PIN 27
+#define REMOTE_PIN 33
 
 #define CONST_180_DIVIDED_BY_PI 57.2957795130823
 
