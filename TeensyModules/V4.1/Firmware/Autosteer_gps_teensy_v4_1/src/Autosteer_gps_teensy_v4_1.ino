@@ -94,8 +94,10 @@ uint32_t gpsReadyTime = 0;        //Used for GGA timeout
 struct ConfigIP {
     uint8_t ipOne = 192;
     uint8_t ipTwo = 168;
-    uint8_t ipThree = 5;
-};  ConfigIP networkAddress;   //3 bytes
+    uint8_t ipThree = 137;
+};  
+
+ConfigIP networkAddress;   //3 bytes
 
 // IP & MAC address of this module of this module
 byte Eth_myip[4] = { 0, 0, 0, 0}; //This is now set via AgIO
@@ -123,7 +125,7 @@ int relposnedByteCount = 0;
 elapsedMillis speedPulseUpdateTimer = 0;
 byte velocityPWM_Pin = 36;      // Velocity (MPH speed) PWM pin
 
-#include "zNMEAParser.h"
+#include "zNMEAParser.h" 
 #include <Wire.h>
 #include "BNO08x_AOG.h"
 
@@ -148,12 +150,15 @@ uint8_t bno08xAddress;
 BNO080 bno08x;
 
 //Dual
+// Heading correction is enetered into the UM982 config so this can be 0.
+// double headingcorr = 0;
 double headingcorr = 900;  //90deg heading correction (90deg*10)
 // Heading correction 180 degrees, because normally the heading antenna is in front, but we have it at the back
 //double headingcorr = 1800;  // 180deg heading correction (180deg*10)
 
 double baseline = 0;
 double rollDual = 0;
+double pitchDual = 0;
 double relPosD = 0;
 double heading = 0;
 
@@ -167,7 +172,7 @@ uint8_t GPS2txbuffer[serial_buffer_size];   //Extra serial tx buffer
 uint8_t RTKrxbuffer[serial_buffer_size];    //Extra serial rx buffer
 
 /* A parser is declared with 3 handlers at most */
-NMEAParser<2> parser;
+NMEAParser<4> parser;
 
 bool isTriggered = false;
 bool blink = false;
@@ -216,7 +221,20 @@ struct ubxPacket
 	////sfe_ublox_packet_validity_e valid;			 //Goes from NOT_DEFINED to VALID or NOT_VALID when checksum is checked
 	////sfe_ublox_packet_validity_e classAndIDmatch; // Goes from NOT_DEFINED to VALID or NOT_VALID when the Class and ID match the requestedClass and requestedID
 };
+// Send data to AgIO via usb
+bool sendUSB = true;
 
+/*****************************************************************/
+// UM982 Support
+bool useUM982 = true;
+//#include "calc_crc32.h"
+//#include "UM982_Parser.h"
+#include "zSmoothed.h"
+
+Smoothed <float> smoothRoll;
+
+//UM982Parser<4> umparser;
+/****************************************************************/
 // Setup procedure ------------------------
 void setup()
 {
@@ -237,6 +255,17 @@ void setup()
   parser.setErrorHandler(errorHandler);
   parser.addHandler("G-GGA", GGA_Handler);
   parser.addHandler("G-VTG", VTG_Handler);
+  parser.addHandler("G-HPR", HPR_Handler);
+
+  // UM982 Support
+  useDual = true;
+  smoothRoll.begin(SMOOTHED_AVERAGE, 10);
+  // if (useUM982){
+    // umparser.setErrorHandler(errorHandler);
+    // umparser.addHandler("UNIHEADINGA", UNIHEADINGA_Handler);
+    // umparser.addHandler("BESTNAVXYZA", BESTNAVXYZA_Handler);
+    // umparser.addHandler("BESTNAVXYZHA", BESTNAVXYZHA_Handler);
+  // }
 
   delay(10);
   Serial.begin(baudAOG);
