@@ -4,6 +4,10 @@
 #include <EEPROM.h>
 #include <Wire.h>
 #include "zNMEAParser.h"
+
+#include <WiFiManager.h>
+#include "AsyncUDP.h"
+
 /*  PWM Frequency ->
      490hz (default) = 0
      122hz = 1
@@ -52,6 +56,11 @@ uint8_t watchdogTimer = WATCHDOG_FORCE_VALUE;
 
 Scheduler ts;
 
+AsyncUDP udp;
+
+IPAddress myip;
+
+
 void imuTask();
 
 void gpsStream();
@@ -60,7 +69,7 @@ void inputHandler();
 
 void autosteerLoop();
 
-void autoSteerPacketPerser();
+void autoSteerPacketPerser(AsyncUDPPacket udpPacket);
 
 Task t1(TASK_IMMEDIATE, TASK_FOREVER, &imuTask, &ts, true);
 
@@ -218,10 +227,38 @@ void setup() {
 
   initInput();
 
+   // Create WiFiManager object
+  WiFiManager wfm;
+  // Supress Debug information
+  wfm.setDebugOutput(false);
+
+  if (!wfm.autoConnect("ESP32TEST_AP")) {
+    // Did not connect, print error message
+    Serial.println("failed to connect and hit timeout");
+
+    // Reset and try again
+    ESP.restart();
+    delay(1000);
+  }
+
+  myip = WiFi.localIP();
+  // Connected!
+  Serial.println("WiFi connected");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  if (udp.listen(8888)) {
+    Serial.print("UDP Listening on IP: ");
+    Serial.println(WiFi.localIP());
+    udp.onPacket([](AsyncUDPPacket packet) {
+      autoSteerPacketPerser(packet);
+    });
+  }
+
   autosteerSetup();
 }
 
 void loop() {
-  autoSteerPacketPerser();
+  //autoSteerPacketPerser();
   ts.execute();
 }

@@ -1,24 +1,29 @@
 
 
 uint8_t data[16384];
-uint8_t buffer[4096];
+uint8_t* buffer;
 int bufferIndex = 0;
 
 //Heart beat hello AgIO
-uint8_t helloFromIMU[] = { 128, 129, 121, 121, 5, 0, 0, 0, 0, 0, 71, 0x0D, 0x0A };
-uint8_t helloFromAutoSteer[] = { 0x80, 0x81, 126, 126, 5, 0, 0, 0, 0, 0, 71, 0x0D, 0x0A };
+uint8_t helloFromIMU[] = { 128, 129, 121, 121, 13, 0, 0, 0, 0, 0, 71, 0x0D, 0x0A };
+uint8_t helloFromAutoSteer[] = { 0x80, 0x81, 126, 126, 13, 0, 0, 0, 0, 0, 71, 0x0D, 0x0A };
 
 //fromAutoSteerData FD 253 - ActualSteerAngle*100 -5,6, SwitchByte-7, pwmDisplay-8
-uint8_t PGN_253[] = { 0x80, 0x81, 126, 0xFD, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0xCC, 0x0D, 0x0A };
+uint8_t PGN_253[] = { 0x80, 0x81, 126, 0xFD, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0xCC, 0x0D, 0x0A };
 int8_t PGN_253_Size = sizeof(PGN_253) - 3;
 
 //fromAutoSteerData FD 250 - sensor values etc
-uint8_t PGN_250[] = { 0x80, 0x81, 126, 0xFA, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0xCC, 0x0D, 0x0A };
+uint8_t PGN_250[] = { 0x80, 0x81, 126, 0xFA, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0xCC, 0x0D, 0x0A };
 int8_t PGN_250_Size = sizeof(PGN_250) - 3;
 
 int packetSize;
 
+unsigned int AOGNtripPort = 2233;                 // port NTRIP data from AOG comes in
+unsigned int AOGAutoSteerPort = 8888;             // port Autosteer data from AOG comes in
+unsigned int portDestination = 9999;              // Port of AOG that listens
+IPAddress ipDes = IPAddress(255, 255, 255, 255);  //AOG IP
 
+/*
 void autoSteerPacketPerser() {
 
   int size = Serial.available();
@@ -42,10 +47,32 @@ void autoSteerPacketPerser() {
       i = -1;
     }
   }
+}*/
+
+void autoSteerPacketPerser(AsyncUDPPacket udpPacket) {
+  if (udpPacket.length() < 5)
+    return;
+  buffer = udpPacket.data();
+  for (int i = 0; i < udpPacket.length(); i++) {
+    data[bufferIndex] = buffer[i];
+    bufferIndex++;
+  }
+
+  for (int i = 0; i < bufferIndex - 1; i++) {
+    if (data[i] == 13 && data[i + 1] == 10) {
+      parsePacket(data, i, udpPacket);
+      for (int x = 0; x < bufferIndex - i - 1; x++) {
+        data[x] = data[i + 2 + x];
+      }
+      bufferIndex -= i + 2;
+      i = -1;
+    }
+  }
 }
 
 
-void parsePacket(uint8_t* packet, int size) {
+void parsePacket(uint8_t* packet, int size, AsyncUDPPacket udpPacket) {
+
   if (packet[0] == 0x80 && packet[1] == 0x81 && packet[2] == 0x7F)  //Data
   {
     switch (packet[3]) {
@@ -221,10 +248,11 @@ void parsePacket(uint8_t* packet, int size) {
         {
           //make really sure this is the reply pgn
           if (packet[4] == 3 && packet[5] == 202 && packet[6] == 202) {
+            ipDes = udpPacket.remoteIP();
             //hello from AgIO
-            uint8_t scanReply[] = { 128, 129, 126, 203, 7,
-                                    0, 0, 0, 0,
-                                    0, 0, 0, 23 };
+            uint8_t scanReply[] = { 128, 129, 126, 203, 13,
+                                    myip[0], myip[1], myip[2], myip[3],
+                                    myip[0], myip[1], myip[2], 23 };
 
             //checksum
             int16_t CK_A = 0;
@@ -236,22 +264,24 @@ void parsePacket(uint8_t* packet, int size) {
             sendData(scanReply, sizeof(scanReply));
           }
         }
-      case 100: //NTRIP
+      case 100:  //NTRIP
         {
-          uint8_t NTRIPData[size-4];
-          
-          for (int i = 4; i <size ;i++ )
-          {
-            NTRIPData[i-4] = packet[i];
+          uint8_t NTRIPData[size - 4];
+
+          for (int i = 4; i < size; i++) {
+            NTRIPData[i - 4] = packet[i];
           }
-          Serial2.write(NTRIPData, size-4);
+          Serial2.write(NTRIPData, size - 4);
         }
     }
   } else {
-    Serial2.println("Unknown packet!!!");
+    Serial.println("Unknown packet!!!");
   }
 }
 
 void sendData(uint8_t* data, uint8_t datalen) {
-  Serial.write(data, datalen);
+  AsyncUDPMessage m = AsyncUDPMessage(datalen);
+  m.write(data, datalen);
+  udp.sendTo(m, ipDes, 9999);
+  //Serial.write(data, datalen);
 }
