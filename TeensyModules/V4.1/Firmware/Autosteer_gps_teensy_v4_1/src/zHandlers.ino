@@ -20,6 +20,10 @@ char ageDGPS[10];
 char vtgHeading[12] = { };
 char speedKnots[10] = { };
 
+// HPR
+char umHeading[8];
+char umRoll[8];
+
 // IMU
 char imuHeading[6];
 char imuRoll[6];
@@ -97,6 +101,32 @@ void GGA_Handler() //Rec'd GGA
     }
     
     gpsReadyTime = systick_millis_count;    //Used for GGA timeout (LED's ETC) 
+}
+
+void VTG_Handler()
+{
+  // vtg heading
+  parser.getArg(0, vtgHeading);
+
+  // vtg Speed knots
+  parser.getArg(4, speedKnots);
+}
+
+//UM982 Support
+void HPR_Handler()
+{ 
+  //useDual = true;
+  dualReadyRelPos = true;
+
+  // HPR Heading
+  parser.getArg(1, umHeading);
+  heading = atof(umHeading);
+
+  // HPR Substitute pitch for roll
+  parser.getArg(2, umRoll);
+  smoothRoll.add(atof(umRoll));
+  rollDual = smoothRoll.get();
+  //rollDual = atof(umRoll);
 }
 
 void readBNO()
@@ -472,14 +502,3 @@ void CalculateChecksum(void)
     010.2,K      Ground speed, Kilometers per hour
      48          Checksum
 */
-
-void VTG_Handler()
-{
-  // vtg heading
-  parser.getArg(0, vtgHeading);
-
-  // vtg Speed knots
-  parser.getArg(4, speedKnots);
-
-
-}
