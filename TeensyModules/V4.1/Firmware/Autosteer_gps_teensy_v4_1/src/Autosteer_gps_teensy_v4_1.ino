@@ -227,13 +227,10 @@ bool sendUSB = true;
 /*****************************************************************/
 // UM982 Support
 bool useUM982 = true;
-//#include "calc_crc32.h"
-//#include "UM982_Parser.h"
+
 #include "zSmoothed.h"
+Smoothed <float> smoothRoll; // Smooth out the roll to avoid "jittery" roll read gauge.
 
-Smoothed <float> smoothRoll;
-
-//UM982Parser<4> umparser;
 /****************************************************************/
 // Setup procedure ------------------------
 void setup()
@@ -258,14 +255,8 @@ void setup()
   parser.addHandler("G-HPR", HPR_Handler);
 
   // UM982 Support
-  useDual = true;
-  smoothRoll.begin(SMOOTHED_AVERAGE, 10);
-  // if (useUM982){
-    // umparser.setErrorHandler(errorHandler);
-    // umparser.addHandler("UNIHEADINGA", UNIHEADINGA_Handler);
-    // umparser.addHandler("BESTNAVXYZA", BESTNAVXYZA_Handler);
-    // umparser.addHandler("BESTNAVXYZHA", BESTNAVXYZHA_Handler);
-  // }
+  useDual = true; // Avoids initial PANDA message being sent before first GPHPR message received from UM982.
+  smoothRoll.begin(SMOOTHED_AVERAGE, 10); // At 10Hz this is a 1 second rolling average.
 
   delay(10);
   Serial.begin(baudAOG);
