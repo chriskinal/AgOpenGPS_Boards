@@ -24,6 +24,7 @@
 // Serial 1 Out - UBX-NAV-RELPOSNED
 // CFG-UART2-BAUDRATE 460800
 // Serial 2 In RTCM
+// Windows test
 
 /************************* User Settings *************************/
 // Serial Ports
