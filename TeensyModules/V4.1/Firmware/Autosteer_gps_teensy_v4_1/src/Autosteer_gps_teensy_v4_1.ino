@@ -132,6 +132,7 @@ byte velocityPWM_Pin = 36;      // Velocity (MPH speed) PWM pin
 //Used to set CPU speed
 extern "C" uint32_t set_arm_clock(uint32_t frequency); // required prototype
 
+// Booleans for dual GPS
 bool useDual = false;
 bool dualReadyGGA = false;
 bool dualReadyRelPos = false;
@@ -151,7 +152,6 @@ BNO080 bno08x;
 
 //Dual
 // Heading correction is enetered into the UM982 config so this can be 0.
-// double headingcorr = 0;
 double headingcorr = 900;  //90deg heading correction (90deg*10)
 // Heading correction 180 degrees, because normally the heading antenna is in front, but we have it at the back
 //double headingcorr = 1800;  // 180deg heading correction (180deg*10)
@@ -171,7 +171,7 @@ uint8_t GPS2rxbuffer[serial_buffer_size];   //Extra serial rx buffer
 uint8_t GPS2txbuffer[serial_buffer_size];   //Extra serial tx buffer
 uint8_t RTKrxbuffer[serial_buffer_size];    //Extra serial rx buffer
 
-/* A parser is declared with 3 handlers at most */
+/* A parser is declared with 4 handlers at most */
 NMEAParser<4> parser;
 
 bool isTriggered = false;
@@ -229,9 +229,10 @@ bool sendUSB = true;
 bool useUM982 = true;
 
 #include "zSmoothed.h"
-Smoothed <float> smoothRoll; // Smooth out the roll to avoid "jittery" roll read gauge.
+Smoothed <float> smoothRoll; // Smooth out the roll to avoid "jittery" roll gauge readings.
 
 /****************************************************************/
+
 // Setup procedure ------------------------
 void setup()
 {
