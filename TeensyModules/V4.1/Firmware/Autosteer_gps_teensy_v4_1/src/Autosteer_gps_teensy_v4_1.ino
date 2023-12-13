@@ -617,9 +617,15 @@ void loop()
     }
 
     // If both dual messages are ready, send to AgOpen
+    // Serial.print("dualReadyGGA: ");
+    // Serial.println(dualReadyGGA);
+    // Serial.print("dualReadyRelPos: ");
+    // Serial.println(dualReadyRelPos);
     if (dualReadyGGA == true && dualReadyRelPos == true)
     {
+        imuHandler();
         BuildNmea();
+        //Serial.println("BuildNMEA 1");
         dualReadyGGA = false;
         dualReadyRelPos = false;
     }
