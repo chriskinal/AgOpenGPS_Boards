@@ -227,10 +227,16 @@ bool sendUSB = true;
 
 /*****************************************************************/
 // UM982 Support
-bool useUM982 = true;
+bool useUM982 = true; // GPS neeeds to send GGA, VTG & HPR messages only if this "true" and udpPassthrough is "false".
+bool udpPassthrough = false; // GPS needs send GGA and KSXT messages only if useUM982 and this are both "true".
+bool gotCR = false;
+bool gotLF = false;
+bool gotDollar = false;
+char msgBuf[254];
+int msgBufLen = 0;
 
-#include "zSmoothed.h"
-Smoothed <float> smoothRoll; // Smooth out the roll to avoid "jittery" roll gauge readings.
+//#include "zSmoothed.h"
+//Smoothed <float> smoothRoll; // Smooth out the roll to avoid "jittery" roll gauge readings.
 
 /****************************************************************/
 
@@ -258,7 +264,7 @@ void setup()
 
   // UM982 Support
   useDual = true; // Avoids initial PANDA message being sent before first GPHPR message received from UM982.
-  smoothRoll.begin(SMOOTHED_AVERAGE, 10); // At 10Hz this is a 1 second rolling average.
+  //smoothRoll.begin(SMOOTHED_AVERAGE, 10); // At 10Hz this is a 1 second rolling average.
 
   delay(10);
   Serial.begin(baudAOG);
@@ -600,11 +606,58 @@ void loop()
     {
         if (passThroughGPS)
         {
-            SerialAOG.write(SerialGPS->read());
+          SerialAOG.write(SerialGPS->read());
+        }
+        else if (useUM982 && udpPassthrough)
+        {
+            //char mChar;
+            char incoming = SerialGPS->read();
+            //Serial.println(incoming);
+            switch (incoming) {
+                case '$':
+                msgBuf[msgBufLen] = incoming;
+                msgBufLen ++;
+                gotDollar = true;
+                break;
+                case '\r':
+                msgBuf[msgBufLen] = incoming;
+                msgBufLen ++;
+                gotCR = true;
+                gotDollar = false;
+                break;
+                case '\n':
+                msgBuf[msgBufLen] = incoming;
+                msgBufLen ++;
+                gotLF = true;
+                gotDollar = false;
+                break;
+                default:
+                if (gotDollar)
+                    {
+                    msgBuf[msgBufLen] = incoming;
+                    msgBufLen ++;
+                    }
+                break;
+            }
+            if (gotCR && gotLF){
+                //Serial.print(msgBuf);
+                //Serial.println(msgBufLen);
+                if (sendUSB) { SerialAOG.write(msgBuf); } // Send USB GPS data if enabled in user settings
+                if (Ethernet_running){
+                    Eth_udpPAOGI.beginPacket(Eth_ipDestination, portDestination);
+                    Eth_udpPAOGI.write(msgBuf, msgBufLen);
+                    Eth_udpPAOGI.endPacket();
+                }
+                gotCR = false;
+                gotLF = false;
+                gotDollar = false;
+                memset( msgBuf, 0, 254 );
+                msgBufLen = 0;
+            }
         }
         else
         {
-            parser << SerialGPS->read();
+          parser << SerialGPS->read();
         }
     }
 

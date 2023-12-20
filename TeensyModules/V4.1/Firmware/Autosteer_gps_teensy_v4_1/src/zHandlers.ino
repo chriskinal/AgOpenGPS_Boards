@@ -117,7 +117,7 @@ void VTG_Handler()
 //UM982 Support
 void HPR_Handler()
 { 
-  useDual = true;
+  //useDual = true;
   dualReadyRelPos = true;
 
   // HPR Heading
@@ -306,6 +306,9 @@ void imuHandler()
 
             // the Dual heading raw
             dtostrf(heading, 4, 2, imuHeading);
+
+            // the pitch
+            dtostrf(pitchDual, 4, 4, imuPitch);
         }
     }
 }
