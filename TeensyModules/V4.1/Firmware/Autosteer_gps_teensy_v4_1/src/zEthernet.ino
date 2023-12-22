@@ -24,6 +24,7 @@ void EthernetStart()
   Eth_myip[0] = networkAddress.ipOne;
   Eth_myip[1] = networkAddress.ipTwo;
   Eth_myip[2] = networkAddress.ipThree;
+
   if (Autosteer_running) 
   {
     Eth_myip[3] = 126;  //126 is steer module, with or without GPS

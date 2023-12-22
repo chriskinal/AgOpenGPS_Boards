@@ -24,7 +24,6 @@
 // Serial 1 Out - UBX-NAV-RELPOSNED
 // CFG-UART2-BAUDRATE 460800
 // Serial 2 In RTCM
-// Windows test
 
 /************************* User Settings *************************/
 // Serial Ports
@@ -32,7 +31,7 @@
 #define SerialRTK Serial3               //RTK radio
 HardwareSerial* SerialGPS = &Serial7;   //Main postion receiver (GGA) (Serial2 must be used here with T4.0 / Basic Panda boards - Should auto swap)
 HardwareSerial* SerialGPS2 = &Serial2;  //Dual heading receiver 
-HardwareSerial* SerialGPSTmp = NULL;
+HardwareSerial* SerialGPSTmp = &Serial8;
 //HardwareSerial* SerialAOG = &Serial;
 
 const int32_t baudAOG = 115200;
@@ -58,7 +57,7 @@ const uint32_t nrBaudrates = sizeof(baudrates)/sizeof(baudrates[0]);
 #define ImuWire Wire        //SCL=19:A5 SDA=18:A4
 #define RAD_TO_DEG_X_10 572.95779513082320876798154814105
 
-//Swap BNO08x roll & pitch?
+//Swap BNO08x roll & ?
 //const bool swapRollPitch = false;
 
 const bool invertRoll= true;  //Used for IMU with dual antenna
@@ -68,14 +67,29 @@ const bool invertRoll= true;  //Used for IMU with dual antenna
 uint32_t READ_BNO_TIME = 0;   //Used stop BNO data pile up (This version is without resetting BNO everytime)
 
 //Status LED's
+//#define GGAReceivedLED 13         //Teensy onboard LED
 #define GGAReceivedLED 13         //Teensy onboard LED
-#define Power_on_LED 5            //Red
-#define Ethernet_Active_LED 6     //Green
-#define GPSRED_LED 9              //Red (Flashing = NO IMU or Dual, ON = GPS fix with IMU)
-#define GPSGREEN_LED 10           //Green (Flashing = Dual bad, ON = Dual good)
-#define AUTOSTEER_STANDBY_LED 11  //Red
+#define Power_on_LED 5            //Green
+#define Ethernet_Active_LED 6     //Blue
+#define GPSRED_LED 9              //Yellow (Flashing = NO IMU or Dual, ON = GPS fix with IMU)
+#define GPSGREEN_LED 11           //Red (Flashing = Dual bad, ON = Dual good)
+//#define AUTOSTEER_STANDBY_LED 11  //Red
+#define AUTOSTEER_STANDBY_LED 13  //Red
 #define AUTOSTEER_ACTIVE_LED 12   //Green
 uint32_t gpsReadyTime = 0;        //Used for GGA timeout
+
+void errorHandler();
+void GGA_Handler();
+void VTG_Handler();
+void HPR_Handler();
+void autosteerSetup();
+void EthernetStart();
+void udpNtrip();
+void BuildNmea();
+void relPosDecode();
+void readBNO();
+void autosteerLoop();
+void ReceiveUdp();
 
 //for v2.2
 // #define Power_on_LED 22
@@ -84,8 +98,6 @@ uint32_t gpsReadyTime = 0;        //Used for GGA timeout
 // #define GPSGREEN_LED 21
 // #define AUTOSTEER_STANDBY_LED 38
 // #define AUTOSTEER_ACTIVE_LED 39
-
-/*****************************************************************/
 
 // Ethernet Options (Teensy 4.1 Only)
 #ifdef ARDUINO_TEENSY41
@@ -126,14 +138,13 @@ int relposnedByteCount = 0;
 elapsedMillis speedPulseUpdateTimer = 0;
 byte velocityPWM_Pin = 36;      // Velocity (MPH speed) PWM pin
 
-#include "zNMEAParser.h" 
+#include "zNMEAParser.h"
 #include <Wire.h>
 #include "BNO08x_AOG.h"
 
 //Used to set CPU speed
 extern "C" uint32_t set_arm_clock(uint32_t frequency); // required prototype
 
-// Booleans for dual GPS
 bool useDual = false;
 bool dualReadyGGA = false;
 bool dualReadyRelPos = false;
@@ -153,9 +164,12 @@ BNO080 bno08x;
 
 //Dual
 // Heading correction is enetered into the UM982 config so this can be 0.
+// double headingcorr = 0;
 double headingcorr = 900;  //90deg heading correction (90deg*10)
 // Heading correction 180 degrees, because normally the heading antenna is in front, but we have it at the back
 //double headingcorr = 1800;  // 180deg heading correction (180deg*10)
+// Roll correction. Negative number = left; positive number = right.
+//double rollcorr = 50;
 
 double baseline = 0;
 double rollDual = 0;
@@ -172,7 +186,7 @@ uint8_t GPS2rxbuffer[serial_buffer_size];   //Extra serial rx buffer
 uint8_t GPS2txbuffer[serial_buffer_size];   //Extra serial tx buffer
 uint8_t RTKrxbuffer[serial_buffer_size];    //Extra serial rx buffer
 
-/* A parser is declared with 4 handlers at most */
+/* A parser is declared with 3 handlers at most */
 NMEAParser<4> parser;
 
 bool isTriggered = false;
@@ -222,6 +236,7 @@ struct ubxPacket
 	////sfe_ublox_packet_validity_e valid;			 //Goes from NOT_DEFINED to VALID or NOT_VALID when checksum is checked
 	////sfe_ublox_packet_validity_e classAndIDmatch; // Goes from NOT_DEFINED to VALID or NOT_VALID when the Class and ID match the requestedClass and requestedID
 };
+
 // Send data to AgIO via usb
 bool sendUSB = true;
 
@@ -234,13 +249,17 @@ bool gotLF = false;
 bool gotDollar = false;
 char msgBuf[254];
 int msgBufLen = 0;
-
+//char mChar;
+//#include "calc_crc32.h"
+//#include "UM982_Parser.h"
 //#include "zSmoothed.h"
-//Smoothed <float> smoothRoll; // Smooth out the roll to avoid "jittery" roll gauge readings.
 
+//Smoothed <float> smoothRoll;
+
+//UM982Parser<4> umparser;
 /****************************************************************/
 
-// Setup procedure ------------------------
+// Setup procedure ---------------------------------------------------------------------------------------------------------------
 void setup()
 {
     delay(500);                         //Small delay so serial can monitor start up
@@ -256,15 +275,23 @@ void setup()
   pinMode(AUTOSTEER_STANDBY_LED, OUTPUT);
   pinMode(AUTOSTEER_ACTIVE_LED, OUTPUT);
 
+  // digitalWrite(Power_on_LED, 1);
   // the dash means wildcard
+ 
   parser.setErrorHandler(errorHandler);
   parser.addHandler("G-GGA", GGA_Handler);
   parser.addHandler("G-VTG", VTG_Handler);
   parser.addHandler("G-HPR", HPR_Handler);
 
   // UM982 Support
-  useDual = true; // Avoids initial PANDA message being sent before first GPHPR message received from UM982.
-  //smoothRoll.begin(SMOOTHED_AVERAGE, 10); // At 10Hz this is a 1 second rolling average.
+  useDual = true;
+  //smoothRoll.begin(SMOOTHED_AVERAGE, 10);
+  // if (useUM982){
+    // umparser.setErrorHandler(errorHandler);
+    // umparser.addHandler("UNIHEADINGA", UNIHEADINGA_Handler);
+    // umparser.addHandler("BESTNAVXYZA", BESTNAVXYZA_Handler);
+    // umparser.addHandler("BESTNAVXYZHA", BESTNAVXYZHA_Handler);
+  // }
 
   delay(10);
   Serial.begin(baudAOG);
@@ -298,7 +325,7 @@ void setup()
 
   ImuWire.begin();
   
-  //Serial.println("Checking for CMPS14");
+  //Serial.println("Checking for CMPS14");  `-=p[l]
   ImuWire.beginTransmission(CMPS14_ADDRESS);
   error = ImuWire.endTransmission();
 
@@ -670,15 +697,12 @@ void loop()
     }
 
     // If both dual messages are ready, send to AgOpen
-    // Serial.print("dualReadyGGA: ");
-    // Serial.println(dualReadyGGA);
-    // Serial.print("dualReadyRelPos: ");
-    // Serial.println(dualReadyRelPos);
-    if (dualReadyGGA == true && dualReadyRelPos == true)
+    //Serial.print(dualReadyGGA);
+    //Serial.println(dualReadyRelPos);
+    if (dualReadyGGA == true && dualReadyRelPos == true )
     {
         imuHandler();
         BuildNmea();
-        //Serial.println("BuildNMEA 1");
         dualReadyGGA = false;
         dualReadyRelPos = false;
     }

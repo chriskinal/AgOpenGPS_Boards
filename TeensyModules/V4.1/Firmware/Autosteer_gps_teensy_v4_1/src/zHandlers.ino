@@ -76,6 +76,8 @@ void GGA_Handler() //Rec'd GGA
     blink = !blink;
     GGA_Available = true;
 
+    //if (useUM982){useDual = true;}
+
     if (useDual)
     {
        dualReadyGGA = true;
@@ -84,8 +86,7 @@ void GGA_Handler() //Rec'd GGA
     if (useBNO08x || useCMPS)
     {
        imuHandler();          //Get IMU data ready
-       BuildNmea();
-       //Serial.println("BuildNMEA2");           //Build & send data GPS data to AgIO (Both Dual & Single)
+       BuildNmea();           //Build & send data GPS data to AgIO (Both Dual & Single)
        dualReadyGGA = false;  //Force dual GGA ready false because we just sent it to AgIO based off the IMU data
        if (!useDual)
        {
@@ -99,9 +100,8 @@ void GGA_Handler() //Rec'd GGA
         digitalWrite(GPSGREEN_LED, LOW);   //Make sure the Green LED is OFF
         itoa(65535, imuHeading, 10);       //65535 is max value to stop AgOpen using IMU in Panda
         BuildNmea();
-        //Serial.println("BuildNMEA3");
     }
-    
+
     gpsReadyTime = systick_millis_count;    //Used for GGA timeout (LED's ETC) 
 }
 
@@ -128,7 +128,7 @@ void HPR_Handler()
   parser.getArg(2, umRoll);
   //smoothRoll.add(atof(umRoll));
   //rollDual = smoothRoll.get();
-  rollDual = atof(umRoll);
+  //rollDual = atof(umRoll);
 }
 
 void readBNO()
@@ -379,7 +379,7 @@ void BuildNmea(void)
 
     if (!passThroughGPS && !passThroughGPS2)
     {
-        SerialAOG.write(nmea);  //Always send USB GPS data
+        if (sendUSB) { SerialAOG.write(nmea); } // Send USB GPS data if enabled in user settings
     }
 
     if (Ethernet_running)   //If ethernet running send the GPS there

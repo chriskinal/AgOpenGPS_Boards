@@ -385,6 +385,7 @@ template <size_t S> class NMEAParser {
     void operator<<(char inChar)
     {
       int8_t tmp;
+      //Serial.println(inChar);
 
       switch (mState) {
 
