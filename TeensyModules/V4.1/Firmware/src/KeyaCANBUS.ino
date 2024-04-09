@@ -30,7 +30,7 @@ uint8_t keyaVersionResponse[] = { 0x60, 0x01, 0x11, 0x11 };
 
 uint64_t KeyaID = 0x06000001; // 0x01 is default ID
 
-const bool debugKeya = false;
+const bool debugKeya = true;
 bool lnNeeded = false;
 uint32_t hbTime;
 uint32_t keyaTime;
